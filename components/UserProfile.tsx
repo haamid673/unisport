@@ -19,7 +19,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
     bio: user.bio || '',
     preferences: user.preferences?.join(', ') || ''
   });
-  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const openDirections = (location: string) => {
     const encoded = encodeURIComponent(location);
@@ -51,8 +51,12 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
         name: formData.name,
         phone: formData.phone,
         bio: formData.bio,
-        preferences: formData.preferences.split(',').map(s => s.trim()).filter(Boolean)
+        preferences: formData.preferences
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean)
       });
+
       onUpdate(updatedUser);
       setIsEditing(false);
       setMessage({ type: 'success', text: 'Profile updated successfully!' });
@@ -65,8 +69,6 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
   return (
     <div className="max-w-4xl mx-auto px-4 py-12 font-sans">
       <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden shadow-sm">
-
-        {/* HEADER */}
         <div className="h-44 bg-gradient-to-r from-neutral-950 via-neutral-900 to-orange-800 relative flex items-end">
           <div className="absolute inset-0 bg-black/30"></div>
 
@@ -91,9 +93,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
           </div>
         </div>
 
-        {/* CONTENT BELOW HEADER */}
         <div className="px-8 py-10">
-
           {message && (
             <div
               className={`mb-6 p-3 rounded-md text-sm font-bold ${
@@ -162,20 +162,20 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
               <div className="space-y-6">
                 {bookings.length > 0 ? (
                   bookings.map((booking) => {
-                    const isCancelled = booking.status === "cancelled";
-                    const isPending = booking.status === "pending";
+                    const isCancelled = booking.status === 'cancelled';
+                    const isPending = booking.status === 'pending';
 
-                    let statusColor = "text-emerald-700 bg-emerald-100 border-emerald-200";
-                    let statusLabel = "Confirmed";
+                    let statusColor = 'text-emerald-700 bg-emerald-100 border-emerald-200';
+                    let statusLabel = 'Confirmed';
 
                     if (isPending) {
-                      statusColor = "text-amber-700 bg-amber-100 border-amber-200";
-                      statusLabel = "Pending";
+                      statusColor = 'text-amber-700 bg-amber-100 border-amber-200';
+                      statusLabel = 'Pending';
                     }
 
                     if (isCancelled) {
-                      statusColor = "text-red-700 bg-red-100 border-red-200";
-                      statusLabel = "Cancelled";
+                      statusColor = 'text-red-700 bg-red-100 border-red-200';
+                      statusLabel = 'Cancelled';
                     }
 
                     return (
@@ -244,7 +244,6 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
               </div>
             </section>
           )}
-
         </div>
       </div>
     </div>

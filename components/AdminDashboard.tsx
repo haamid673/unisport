@@ -49,9 +49,9 @@ const AdminDashboard: React.FC = () => {
         createdAt: b.createdAt || new Date().toISOString()
       }));
       
-      const risks = await aiEngine.detectFraud(bookingData);
-      setFraudRisks(risks);
-      setLoadingRisk(false);
+      // const risks = await aiEngine.detectFraud(bookingData);
+      // setFraudRisks(risks);
+      // setLoadingRisk(false);
 
     } catch (err: any) {
       console.error(err);
@@ -126,7 +126,7 @@ const AdminDashboard: React.FC = () => {
             { id: 'overview', label: 'Security Logs', icon: 'fa-history' },
             { id: 'users', label: 'User Registry', icon: 'fa-user-shield' },
             { id: 'facilities', label: 'Global Facilities', icon: 'fa-map-location-dot' },
-            { id: 'risk', label: 'Risk Monitor', icon: 'fa-triangle-exclamation' },
+          //  { id: 'risk', label: 'Risk Monitor', icon: 'fa-triangle-exclamation' },
             { id: 'audit', label: 'Audit Trail', icon: 'fa-list-check' }
           ].map((tab) => (
             <button 
@@ -328,7 +328,7 @@ const AdminDashboard: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'risk' && (
+          {/* {activeTab === 'risk' && (
             <div className="space-y-6">
               <div className="bg-neutral-900 text-white p-6 rounded-lg border border-neutral-800 flex justify-between items-center">
                 <div className="flex items-center gap-3">
@@ -371,7 +371,7 @@ const AdminDashboard: React.FC = () => {
                 )}
               </div>
             </div>
-          )}
+          )} */}
 
           {activeTab === 'audit' && (
              <div className="space-y-4">

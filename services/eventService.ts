@@ -492,7 +492,57 @@ const seededGroups: CommunityGroup[] = [
   { id: 'g12', name: 'Delhi Smashers', sport: 'Tennis', city: 'Delhi', createdBy: 'owner3', status: 'approved', members: ['owner3', 'user6'], imageUrl: getSportImage('Tennis') },
   { id: 'g13', name: 'Bangalore Ballers', sport: 'Basketball', city: 'Bangalore', createdBy: 'owner2', status: 'approved', members: ['owner2', 'user5'], imageUrl: getSportImage('Basketball') },
   { id: 'g14', name: 'Hyderabad Shuttlers', sport: 'Badminton', city: 'Hyderabad', createdBy: 'owner1', status: 'approved', members: ['owner1', 'user4'], imageUrl: getSportImage('Badminton') },
-  { id: 'g15', name: 'Kolkata Knights', sport: 'Cricket', city: 'Kolkata', createdBy: 'owner2', status: 'approved', members: ['owner2', 'user1'], imageUrl: getSportImage('Cricket') }
+  { id: 'g15', name: 'Kolkata Knights', sport: 'Cricket', city: 'Kolkata', createdBy: 'owner2', status: 'approved', members: ['owner2', 'user1'], imageUrl: getSportImage('Cricket') },
+    { 
+    id: 'g16',
+    name: 'Trivandrum Shuttlers',
+    sport: 'Badminton',
+    city: 'Trivandrum',
+    createdBy: 'admin',
+    status: 'approved',
+    members: ['admin', 'user1'],
+    imageUrl: getSportImage('Badminton')
+  },
+  { 
+    id: 'g17',
+    name: 'Trivandrum Turf League',
+    sport: 'Football',
+    city: 'Trivandrum',
+    createdBy: 'owner1',
+    status: 'approved',
+    members: ['owner1', 'user3'],
+    imageUrl: getSportImage('Football')
+  },
+  { 
+    id: 'g18',
+    name: 'Fitness Tribe TVM',
+    sport: 'Gym',
+    city: 'Trivandrum',
+    createdBy: 'owner3',
+    status: 'approved',
+    members: ['owner3', 'user4'],
+    imageUrl: getSportImage('Gym')
+  },
+  { 
+    id: 'g19',
+    name: 'Trivandrum Tennis Circle',
+    sport: 'Tennis',
+    city: 'Trivandrum',
+    createdBy: 'user6',
+    status: 'approved',
+    members: ['user6', 'user1'],
+    imageUrl: getSportImage('Tennis')
+  },
+  { 
+    id: 'g20',
+    name: 'Cricket - Trivandrum',
+    sport: 'Cricket',
+    city: 'Trivandrum',
+    createdBy: 'owner2',
+    status: 'approved',
+    members: ['owner2', 'user5'],
+    imageUrl: getSportImage('Cricket')
+  }
 ];
 
 const seededEvents: CommunityEvent[] = [
@@ -505,7 +555,67 @@ const seededEvents: CommunityEvent[] = [
   { id: 'e7', title: 'Swimming Gala', date: '2024-07-01', time: '08:00 AM', facilityId: 'f5', createdBy: 'user2', participants: ['user2','user6'], status: 'approved', groupId: 'g6', imageUrl: getSportImage('Swimming') },
   { id: 'e8', title: 'Tennis Club Championship', date: '2024-07-05', time: '04:00 PM', facilityId: 'f6', createdBy: 'user6', participants: ['user6','user1'], status: 'approved', groupId: 'g7', imageUrl: getSportImage('Tennis') },
   { id: 'e9', title: 'Futsal Friday', date: '2024-07-07', time: '08:00 PM', facilityId: 'f2', createdBy: 'user3', participants: ['user3','user7','user5'], status: 'approved', groupId: 'g8', imageUrl: getSportImage('Football') },
-  { id: 'e10', title: 'Sunrise Meditation', date: '2024-07-10', time: '05:30 AM', facilityId: 'f7', createdBy: 'user2', participants: ['user2','admin'], status: 'approved', groupId: 'g4', imageUrl: getSportImage('Yoga') }
+  { id: 'e10', title: 'Sunrise Meditation', date: '2024-07-10', time: '05:30 AM', facilityId: 'f7', createdBy: 'user2', participants: ['user2','admin'], status: 'approved', groupId: 'g4', imageUrl: getSportImage('Yoga') },
+    {
+    id: 'e11',
+    title: 'Morning Shuttle Rally',
+    date: '2026-03-15',
+    time: '07:00 AM',
+    facilityId: 't1',
+    createdBy: 'admin',
+    participants: ['admin', 'user1'],
+    status: 'approved',
+    groupId: 'g16',
+    imageUrl: getSportImage('Badminton')
+  },
+  {
+    id: 'e12',
+    title: 'Saturday Turf Match',
+    date: '2026-03-16',
+    time: '06:00 PM',
+    facilityId: 't2',
+    createdBy: 'owner1',
+    participants: ['owner1', 'user3'],
+    status: 'approved',
+    groupId: 'g17',
+    imageUrl: getSportImage('Football')
+  },
+  {
+    id: 'e13',
+    title: 'Strength & Conditioning Meetup',
+    date: '2026-03-17',
+    time: '06:30 AM',
+    facilityId: 't3',
+    createdBy: 'owner3',
+    participants: ['owner3', 'user4'],
+    status: 'approved',
+    groupId: 'g18',
+    imageUrl: getSportImage('Gym')
+  },
+  {
+    id: 'e14',
+    title: 'Evening Tennis Doubles',
+    date: '2026-03-18',
+    time: '05:30 PM',
+    facilityId: 't6',
+    createdBy: 'user6',
+    participants: ['user6', 'user1'],
+    status: 'approved',
+    groupId: 'g19',
+    imageUrl: getSportImage('Tennis')
+  },
+  {
+    id: 'e15',
+    title: 'Weekend Nets Session',
+    date: '2026-03-19',
+    time: '08:00 AM',
+    facilityId: 't5',
+    createdBy: 'owner2',
+    participants: ['owner2', 'user5'],
+    status: 'approved',
+    groupId: 'g20',
+    imageUrl: getSportImage('Cricket')
+  }
 ];
 
 /* -------------------------------------------------- */

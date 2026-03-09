@@ -30,6 +30,9 @@ export interface Facility {
   imageUrl?: string;
   rating?: number;
   status: FacilityStatus;
+  city:string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Slot {
@@ -139,3 +142,5 @@ export interface SlotDemandPrediction {
   confidence: number;
   reasoning: string;
 }
+
+

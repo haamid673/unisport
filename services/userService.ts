@@ -1,4 +1,132 @@
-
+// const initialUsers: User[] = [
+//   { 
+//     id: 'admin', 
+//     email: 'admin@unisport.com', 
+//     passwordHash: hashPassword('admin123'),
+//     role: 'admin', 
+//     name: 'System Admin', 
+//     bio: 'Platform Administrator',
+//     createdAt: new Date().toISOString(), 
+//     city: 'Chennai'
+//   },
+//   { 
+//     id: 'haamid', 
+//     email: 'haamid673@gmail.com', 
+//     passwordHash: hashPassword('123456'),
+//     role: 'user', 
+//     name: 'Haamid', 
+//     bio: 'Suiii',
+//     createdAt: new Date().toISOString(),
+//     city: 'Chennai'
+//   },
+//   { 
+//     id: 'owner1', 
+//     email: 'owner@padel.com', 
+//     passwordHash: hashPassword('owner123'),
+//     role: 'owner', 
+//     name: 'Padel Owner', 
+//     bio: 'Owner of Elite Padel Club',
+//     createdAt: new Date().toISOString(),
+//     city: 'Chennai'
+//   },
+//   { 
+//     id: 'owner2', 
+//     email: 'owner@sports.com', 
+//     passwordHash: hashPassword('owner123'),
+//     role: 'owner', 
+//     name: 'Sports Complex Owner', 
+//     bio: 'Managing multiple sports venues in Chennai',
+//     createdAt: new Date().toISOString(),
+//     city: 'Chennai'
+//   },
+//   { 
+//     id: 'owner3', 
+//     email: 'owner@gym.com', 
+//     passwordHash: hashPassword('owner123'),
+//     role: 'owner', 
+//     name: 'Fitness Center Owner', 
+//     bio: 'Dedicated to fitness and wellness',
+//     createdAt: new Date().toISOString(),
+//     city: 'Bangalore'
+//   },
+//   { 
+//     id: 'user1', 
+//     email: 'player@demo.com', 
+//     passwordHash: hashPassword('player123'),
+//     role: 'user', 
+//     name: 'Demo Player', 
+//     bio: 'Avid sports enthusiast', 
+//     preferences: ['Padel', 'Tennis'], 
+//     createdAt: new Date().toISOString(),
+//     city: 'Chennai'
+//   },
+//   { 
+//     id: 'user2', 
+//     email: 'sarah@demo.com', 
+//     passwordHash: hashPassword('user123'),
+//     role: 'user', 
+//     name: 'Sarah Jenkins', 
+//     bio: 'Love swimming and yoga', 
+//     preferences: ['Swimming', 'Yoga'], 
+//     createdAt: new Date().toISOString(),
+//     city: 'Delhi'
+//   },
+//   { 
+//     id: 'user3', 
+//     email: 'mike@demo.com', 
+//     passwordHash: hashPassword('user123'),
+//     role: 'user', 
+//     name: 'Mike Ross', 
+//     bio: 'Football fanatic', 
+//     preferences: ['Football', 'Futsal'], 
+//     createdAt: new Date().toISOString(),
+//     city: 'Mumbai'
+//   },
+//   { 
+//     id: 'user4', 
+//     email: 'priya@demo.com', 
+//     passwordHash: hashPassword('user123'),
+//     role: 'user', 
+//     name: 'Priya Sharma', 
+//     bio: 'Badminton state player', 
+//     preferences: ['Badminton'], 
+//     createdAt: new Date().toISOString(),
+//     city: 'Chennai'
+//   },
+//   { 
+//     id: 'user5', 
+//     email: 'rahul@demo.com', 
+//     passwordHash: hashPassword('user123'),
+//     role: 'user', 
+//     name: 'Rahul Dravid', 
+//     bio: 'Cricket is life', 
+//     preferences: ['Cricket'], 
+//     createdAt: new Date().toISOString(),
+//     city: 'Bangalore'
+//   },
+//   { 
+//     id: 'user6', 
+//     email: 'emily@demo.com', 
+//     passwordHash: hashPassword('user123'),
+//     role: 'user', 
+//     name: 'Emily Blunt', 
+//     bio: 'Tennis pro in making', 
+//     preferences: ['Tennis'], 
+//     createdAt: new Date().toISOString(),
+//     city: 'Delhi'
+//   },
+//   { 
+//     id: 'user7', 
+//     email: 'david@demo.com', 
+//     passwordHash: hashPassword('user123'),
+//     role: 'user', 
+//     name: 'David Beckham', 
+//     bio: 'Just here for the kick', 
+//     preferences: ['Football'], 
+//     createdAt: new Date().toISOString(),
+//     city: 'Mumbai'
+//   }
+// ];
 import { User, UserRole, AuditLog } from '../types';
 import { storageService, STORAGE_KEYS } from './storageService';
 
@@ -18,6 +146,16 @@ const initialUsers: User[] = [
     bio: 'Platform Administrator',
     createdAt: new Date().toISOString(), 
     city: 'Chennai'
+  },
+  { 
+    id: 'haamid', 
+    email: 'haamid673@gmail.com', 
+    passwordHash: hashPassword('123456'),
+    role: 'user', 
+    name: 'Haamid', 
+    bio: 'Suiii',
+    createdAt: new Date().toISOString(),
+    city: 'Trivandrum'
   },
   { 
     id: 'owner1', 
@@ -58,7 +196,7 @@ const initialUsers: User[] = [
     bio: 'Avid sports enthusiast', 
     preferences: ['Padel', 'Tennis'], 
     createdAt: new Date().toISOString(),
-    city: 'Chennai'
+    city: 'Trivandrum'
   },
   { 
     id: 'user2', 
@@ -147,6 +285,7 @@ export const userService = {
       role: 'user', // Default role
       name,
       phone,
+      city: 'Trivandrum',
       createdAt: new Date().toISOString()
     };
 

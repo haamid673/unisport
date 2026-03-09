@@ -270,31 +270,41 @@ const Community: React.FC<CommunityProps> = ({ user, onSelectCommunity }) => {
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [user.city]);
 
   const refresh = () => {
-    const allGroups = eventService.getAllGroups();
-    // Filter by user's city
-    const cityGroups = allGroups.filter(
-      g => g.city.toLowerCase() === user.city.toLowerCase()
+    const allGroups = eventService.getAllGroups(true).filter(
+      g => g.status === 'approved'
     );
+
+    if (!user.city || !user.city.trim()) {
+      setGroups(allGroups);
+      return;
+    }
+
+    const cityGroups = allGroups.filter(
+      g =>
+        (g.city || '').trim().toLowerCase() ===
+        user.city.trim().toLowerCase()
+    );
+
     setGroups(cityGroups);
+    console.log(allGroups);
   };
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10 font-sans">
-
-      {/* Header */}
       <div className="mb-12 border-b-2 border-neutral-900 pb-6">
         <h2 className="text-5xl font-black uppercase tracking-tighter italic">
           Communities
         </h2>
         <p className="text-neutral-500 font-medium mt-2 tracking-wide uppercase text-xs">
-          Find like-minded players in {user.city}
+          {user.city
+            ? `Find like-minded players in ${user.city}`
+            : 'Find like-minded players near you'}
         </p>
       </div>
 
-      {/* Communities Grid */}
       {groups.length === 0 && (
         <div className="py-16 text-center border-2 border-dashed border-neutral-200 rounded-lg">
           <p className="text-neutral-400 font-bold uppercase tracking-widest">
@@ -310,7 +320,6 @@ const Community: React.FC<CommunityProps> = ({ user, onSelectCommunity }) => {
             onClick={() => onSelectCommunity(group)}
             className="cursor-pointer rounded-xl overflow-hidden border-2 border-neutral-200 hover:border-black transition group bg-white"
           >
-            {/* Banner */}
             <div className="relative h-48 overflow-hidden">
               {group.imageUrl && (
                 <img
@@ -331,16 +340,14 @@ const Community: React.FC<CommunityProps> = ({ user, onSelectCommunity }) => {
               </div>
             </div>
 
-            {/* Footer */}
             <div className="p-5 bg-white">
               <p className="text-xs text-neutral-500 font-bold uppercase tracking-widest">
-                {group.members.length} Members
+                {group.members?.length || 0} Members
               </p>
             </div>
           </div>
         ))}
       </div>
-
     </div>
   );
 };

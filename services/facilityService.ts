@@ -8,17 +8,17 @@ import { userService } from './userService';
 
 const getSportImage = (sport: string) => {
   switch (sport.toLowerCase()) {
-    case 'badminton': return 'https://images.unsplash.com/photo-1626224583764-8478ab2e1539?q=80&w=800&auto=format&fit=crop';
+    case 'badminton': return 'images/stephan-rothe-VePgmkq3hHI-unsplash.jpg';
     case 'football': return 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?q=80&w=800&auto=format&fit=crop';
     case 'basketball': return 'https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=800&auto=format&fit=crop';
     case 'cricket': return 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?q=80&w=800&auto=format&fit=crop';
     case 'tennis': return 'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?q=80&w=800&auto=format&fit=crop';
     case 'padel': return 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?q=80&w=800&auto=format&fit=crop';
-    case 'volleyball': return 'https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?q=80&w=800&auto=format&fit=crop';
+    case 'volleyball': return 'images/jannes-glas-0NaQQsLWLkA-unsplash.jpg';
     case 'swimming': return 'https://images.unsplash.com/photo-1530549387789-4c1017266635?q=80&w=800&auto=format&fit=crop';
     case 'gym': return 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=800&auto=format&fit=crop';
-    case 'yoga': return 'https://images.unsplash.com/photo-1599447421405-075115d6e300?q=80&w=800&auto=format&fit=crop';
-    case 'table tennis': return 'https://images.unsplash.com/photo-1534158914592-062992bbe900?q=80&w=800&auto=format&fit=crop';
+    case 'yoga': return 'images/ginny-rose-stewart-UxkcSzRWM2s-unsplash.jpg';
+    case 'table tennis': return 'images/inkiipow-7h9wGq4IUdE-unsplash.jpg';
     default: return 'https://images.unsplash.com/photo-1517649763962-0c623066013b?q=80&w=800&auto=format&fit=crop'; // Generic gym/sport
   }
 };
@@ -33,7 +33,7 @@ const initialFacilities: Facility[] = [
     location: 'Anna Nagar, Chennai', 
     basePrice: 800, 
     ownerId: 'owner1', 
-    imageUrl: 'https://images.unsplash.com/photo-1626224583764-8478ab2e1539?q=80&w=800&auto=format&fit=crop', 
+    imageUrl: getSportImage('badminton'), 
     rating: 4.8, 
     status: 'approved' 
   },
@@ -290,6 +290,85 @@ const initialFacilities: Facility[] = [
     imageUrl: getSportImage('tennis'), 
     rating: 4.9, 
     status: 'approved' 
+  },
+    // Trivandrum
+  { 
+    id: 't1', 
+    name: 'Kowdiar Badminton Hub', 
+    sport: 'Badminton', 
+    location: 'Kowdiar, Trivandrum', 
+    basePrice: 900, 
+    ownerId: 'owner1', 
+    imageUrl: getSportImage('badminton'), 
+    rating: 4.7, 
+    status: 'approved', 
+    latitude: 8.5222,
+    longitude: 76.9605
+  },
+  { 
+    id: 't2', 
+    name: 'Technopark Turf Arena', 
+    sport: 'Football', 
+    location: 'Kazhakkoottam, Trivandrum', 
+    basePrice: 1600, 
+    ownerId: 'owner2', 
+    imageUrl: getSportImage('football'), 
+    rating: 4.8, 
+    status: 'approved', 
+    latitude: 8.5686,
+    longitude: 76.8731
+  },
+  { 
+    id: 't3', 
+    name: 'Vellayambalam Fitness Club', 
+    sport: 'Gym', 
+    location: 'Vellayambalam, Trivandrum', 
+    basePrice: 500, 
+    ownerId: 'owner3', 
+    imageUrl: getSportImage('gym'), 
+    rating: 4.6, 
+    status: 'approved',
+    latitude: 8.5086 ,
+    longitude: 76.9657
+  },
+  { 
+    id: 't4', 
+    name: 'Sanghumugham Aqua Center', 
+    sport: 'Swimming', 
+    location: 'Sanghumugham, Trivandrum', 
+    basePrice: 700, 
+    ownerId: 'owner2', 
+    imageUrl: getSportImage('swimming'), 
+    rating: 4.5, 
+    status: 'approved',
+    latitude: 8.4833,
+    longitude: 76.9117
+  },
+  { 
+    id: 't5', 
+    name: 'Poojappura Cricket Nets', 
+    sport: 'Cricket', 
+    location: 'Poojappura, Trivandrum', 
+    basePrice: 1300, 
+    ownerId: 'owner2', 
+    imageUrl: getSportImage('cricket'), 
+    rating: 4.7, 
+    status: 'approved' ,
+    latitude: 8.4880,
+    longitude: 76.9809
+  },
+  { 
+    id: 't6', 
+    name: 'LMS Tennis Court', 
+    sport: 'Tennis', 
+    location: 'Palayam, Trivandrum', 
+    basePrice: 1400, 
+    ownerId: 'owner1', 
+    imageUrl: getSportImage('tennis'), 
+    rating: 4.6, 
+    status: 'approved' ,
+    latitude: 8.5039,
+    longitude: 76.9511
   }
 ];
 
@@ -297,9 +376,66 @@ const initialSlots: Slot[] = [
   { id: 's1', facilityId: 'f1', time: '06:00 AM - 07:00 AM', price: 800 },
   { id: 's2', facilityId: 'f1', time: '07:00 AM - 08:00 AM', price: 800 },
   { id: 's3', facilityId: 'f2', time: '06:00 PM - 07:00 PM', price: 1500 },
-  { id: 's4', facilityId: 'f2', time: '07:00 PM - 08:00 PM', price: 1800 }, // Peak hour
-  { id: 's5', facilityId: 'f3', time: '05:00 PM - 06:00 PM', price: 1000 },
-  { id: 's6', facilityId: 'f4', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's4', facilityId: 'f2', time: '07:00 PM - 08:00 PM', price: 1800 },
+  { id: 's5', facilityId: 'f2', time: '07:00 PM - 08:00 PM', price: 1800 },  // Peak hour
+  { id: 's6', facilityId: 'f3', time: '05:00 PM - 06:00 PM', price: 1000 },
+  { id: 's7', facilityId: 'f3', time: '06:00 PM - 07:00 PM', price: 1000 },
+  { id: 's8', facilityId: 'f4', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's9', facilityId: 'f4', time: '08:00 AM - 09:00 AM', price: 1200 },
+  { id: 's10', facilityId: 'f5', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's11', facilityId: 'f5', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's12', facilityId: 'f6', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's13', facilityId: 'f6', time: '06:00 PM - 07:00 PM', price: 1200 },
+  { id: 's14', facilityId: 'f7', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's15', facilityId: 'f8', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's16', facilityId: 'f9', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's17', facilityId: 'f9', time: '06:00 PM - 07:00 PM', price: 1200 },
+  { id: 's18', facilityId: 'm1', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's19', facilityId: 'm2', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's20', facilityId: 'm3', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's21', facilityId: 'd1', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's22', facilityId: 'd2', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's23', facilityId: 'b1', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's24', facilityId: 'b2', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's25', facilityId: 'b3', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's26', facilityId: 'h1', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's27', facilityId: 'h2', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's28', facilityId: 'k1', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's29', facilityId: 'k2', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's30', facilityId: 'j1', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's31', facilityId: 'j2', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's32', facilityId: 'j2', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's33', facilityId: 'f6', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's34', facilityId: 'f7', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's35', facilityId: 'f8', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's36', facilityId: 'f9', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's37', facilityId: 'm1', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's38', facilityId: 'm2', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's39', facilityId: 'm3', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's40', facilityId: 'd1', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's41', facilityId: 'd2', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's42', facilityId: 'b1', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's43', facilityId: 'b2', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's44', facilityId: 'b3', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's45', facilityId: 'h1', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's46', facilityId: 'h2', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's47', facilityId: 'k1', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's48', facilityId: 'k2', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's49', facilityId: 'j1', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's50', facilityId: 'j2', time: '06:00 AM - 07:00 AM', price: 1200 },
+  { id: 's51', facilityId: 'j2', time: '07:00 AM - 08:00 AM', price: 1200 },
+  { id: 's52', facilityId: 't1', time: '06:00 AM - 07:00 AM', price: 900 },
+  { id: 's53', facilityId: 't1', time: '07:00 AM - 08:00 AM', price: 900 },
+  { id: 's54', facilityId: 't2', time: '06:00 PM - 07:00 PM', price: 1600 },
+  { id: 's55', facilityId: 't2', time: '07:00 PM - 08:00 PM', price: 1800 },
+  { id: 's56', facilityId: 't3', time: '06:00 AM - 07:00 AM', price: 500 },
+  { id: 's57', facilityId: 't3', time: '07:00 AM - 08:00 AM', price: 500 },
+  { id: 's58', facilityId: 't4', time: '06:00 AM - 07:00 AM', price: 700 },
+  { id: 's59', facilityId: 't4', time: '07:00 AM - 08:00 AM', price: 700 },
+  { id: 's60', facilityId: 't5', time: '06:00 AM - 07:00 AM', price: 1300 },
+  { id: 's61', facilityId: 't5', time: '08:00 AM - 09:00 AM', price: 1300 },
+  { id: 's62', facilityId: 't6', time: '06:00 AM - 07:00 AM', price: 1400 },
+  { id: 's63', facilityId: 't6', time: '07:00 AM - 08:00 AM', price: 1400 }
 ];
 
 /* ===========================

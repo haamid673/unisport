@@ -105,6 +105,7 @@ import Community from './components/Community';
 import CommunityDetail from './components/CommunityDetail';
 import UserProfile from './components/UserProfile';
 import { seedDemoData } from "./services/demoSeeder";
+import PaymentPage from './components/PaymentPage';
 
 seedDemoData();
 
@@ -113,12 +114,20 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedCommunity, setSelectedCommunity] = useState<CommunityGroup | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [paymentData, setPaymentData] = useState<any | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     const savedUser = userService.getCurrentUser();
     if (savedUser) setUser(savedUser);
     setIsReady(true);
   }, []);
+
+  useEffect(() => {
+  if (!toast) return;
+  const timer = setTimeout(() => setToast(null), 3000);
+  return () => clearTimeout(timer);
+}, [toast]);
 
   const handleLogin = (u: User) => {
     setUser(u);
@@ -145,15 +154,24 @@ const App: React.FC = () => {
   if (!user) return <Auth onLogin={handleLogin} />;
 
   const renderDashboard = () => {
-    switch (user.role) {
-      case 'admin':
-        return <AdminDashboard />;
-      case 'owner':
-        return <OwnerDashboard user={user} />;
-      default:
-        return <UserDashboard user={user} />;
-    }
-  };
+  switch (user.role) {
+    case 'admin':
+      return <AdminDashboard />;
+    case 'owner':
+      return <OwnerDashboard user={user} />;
+    default:
+      return (
+        <UserDashboard
+          user={user}
+          onStartPayment={(data) => {
+            setPaymentData(data);
+            setActiveTab('payment');
+          }}
+        />
+      );
+  }
+};
+
 
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans text-neutral-900">
@@ -188,6 +206,27 @@ const App: React.FC = () => {
         {activeTab === 'profile' && (
           <UserProfile user={user} onUpdate={handleProfileUpdate} />
         )}
+
+        {activeTab === 'payment' && paymentData && (
+        <PaymentPage
+          data={paymentData}
+          onSuccess={() => {
+            setPaymentData(null);
+            setActiveTab('dashboard');
+          }}
+          onCancel={() => {
+            setPaymentData(null);
+            setActiveTab('dashboard');
+          }}
+          user={user}
+          onSuccessMessage={(msg) => setToast(msg)}
+        />
+      )}
+      {toast && (
+  <div className="fixed bottom-6 right-6 bg-black text-white px-6 py-3 rounded-lg shadow-xl z-50 animate-in fade-in slide-in-from-bottom-5">
+    {toast}
+  </div>
+)}
       </main>
 
       <footer className="bg-neutral-900 text-white border-t border-neutral-800 py-12 mt-12">
