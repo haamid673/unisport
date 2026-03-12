@@ -25,6 +25,7 @@ export interface Facility {
   address?: string; // Full address
   contactNumber?: string;
   amenities?: string[]; // gym, pool, etc.
+  amenityOptions?: FacilityAmenity[];
   basePrice: number;
   ownerId: string;
   imageUrl?: string;
@@ -53,8 +54,10 @@ export interface Booking {
   userId: string;
   bookingDate: string; // ISO String YYYY-MM-DD
   finalPrice?: number;
+  selectedAmenities?: SelectedAmenity[];
   priceBreakdown?: {
     basePrice: number;
+    amenitiesTotal?: number;
     demandMultiplier: number;
     peakHourMultiplier: number;
     weekendMultiplier: number;
@@ -143,4 +146,19 @@ export interface SlotDemandPrediction {
   reasoning: string;
 }
 
+export interface FacilityAmenity {
+  id: string;
+  name: string;
+  type: 'fnb' | 'recovery' | 'shower' | 'equipment' | 'wellness' | 'other';
+  price: number;
+  unit?: string; // e.g. "item", "15 min", "session"
+  available?: boolean;
+}
+
+export interface SelectedAmenity {
+  amenityId: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
 

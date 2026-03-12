@@ -1,4 +1,4 @@
-import { Booking } from "../types";
+import { Booking, SelectedAmenity } from "../types";
 import { storageService, STORAGE_KEYS } from "./storageService";
 import { facilityService } from "./facilityService";
 
@@ -8,6 +8,22 @@ export function getAllBookings(): Booking[] {
 
 function saveAllBookings(bookings: Booking[]) {
   storageService.set(STORAGE_KEYS.BOOKINGS, bookings);
+}
+
+function normalizeDate(date: Date) {
+  const normalized = new Date(date);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized;
+}
+
+export function isBookingDateValid(bookingDate: string): boolean {
+  const selected = normalizeDate(new Date(bookingDate));
+  const today = normalizeDate(new Date());
+
+  const maxDate = new Date(today);
+  maxDate.setDate(maxDate.getDate() + 30);
+
+  return selected >= today && selected <= maxDate;
 }
 
 export function isSlotAvailable(slotId: string, date: string): boolean {
@@ -22,13 +38,19 @@ export function isSlotAvailable(slotId: string, date: string): boolean {
 
   return !conflict;
 }
+
 export const checkSlotAvailability = isSlotAvailable;
 
 export function initiateBooking(
   slotId: string,
   userId: string,
-  bookingDate: string
+  bookingDate: string,
+  selectedAmenities: SelectedAmenity[] = [],
+  finalPrice?: number
 ): Booking {
+  if (!isBookingDateValid(bookingDate)) {
+    throw new Error("Bookings are only allowed from today up to 30 days in advance.");
+  }
 
   if (!isSlotAvailable(slotId, bookingDate)) {
     throw new Error("Slot already booked");
@@ -39,11 +61,25 @@ export function initiateBooking(
   const slot = facilityService.getAllSlots().find(s => s.id === slotId);
   if (!slot) throw new Error("Slot not found");
 
+  const amenitiesTotal = selectedAmenities.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+
   const newBooking: Booking = {
     id: crypto.randomUUID(),
     slotId,
     userId,
     bookingDate,
+    selectedAmenities,
+    finalPrice: finalPrice ?? slot.price + amenitiesTotal,
+    priceBreakdown: {
+      basePrice: slot.price,
+      amenitiesTotal,
+      demandMultiplier: 1,
+      peakHourMultiplier: 1,
+      weekendMultiplier: 1
+    },
     status: "pending",
     createdAt: new Date().toISOString()
   };
@@ -61,7 +97,7 @@ export function confirmPayment(bookingId: string): Booking {
   if (index === -1) throw new Error("Booking not found");
 
   if (bookings[index].status === "confirmed") {
-    return bookings[index]; // Prevent double confirm
+    return bookings[index];
   }
 
   bookings[index].status = "confirmed";
@@ -102,7 +138,8 @@ export function getEnrichedUserBookings(userId: string): any[] {
       facilityName: facility ? facility.name : "Unknown Facility",
       sport: facility ? facility.sport : "Unknown Sport",
       slotTime: slot ? slot.time : "Unknown Time",
-      price: slot ? slot.price : 0
+      price: booking.finalPrice ?? slot?.price ?? 0,
+      location: facility ? facility.location : ""
     };
   });
 }
@@ -110,11 +147,17 @@ export function getEnrichedUserBookings(userId: string): any[] {
 export function createBookingTransactional(
   slotId: string,
   userId: string,
-  bookingDate: string
+  bookingDate: string,
+  selectedAmenities: SelectedAmenity[] = [],
+  finalPrice?: number
 ) {
-  const booking = initiateBooking(slotId, userId, bookingDate);
+  const booking = initiateBooking(
+    slotId,
+    userId,
+    bookingDate,
+    selectedAmenities,
+    finalPrice
+  );
 
-  // For backward compatibility,
-  // auto-confirm immediately (old behavior)
   return confirmPayment(booking.id);
 }

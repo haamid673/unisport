@@ -1,19 +1,17 @@
 import { storageService } from './storageService';
 
-const OTP_STORAGE_KEY = 'unisport_auth_otp_session_v1';
-
-type OtpChannel = 'email' | 'phone';
+const OTP_KEY = 'unisport_auth_otp_v1';
 
 interface OtpSession {
   identifier: string;
-  channel: OtpChannel;
+  channel: 'email' | 'phone';
   otp: string;
   createdAt: number;
   expiresAt: number;
 }
 
 export const authOtpService = {
-  sendOtp: (identifier: string, channel: OtpChannel): string => {
+  sendOtp: (identifier: string, channel: 'email' | 'phone') => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     const session: OtpSession = {
@@ -21,59 +19,43 @@ export const authOtpService = {
       channel,
       otp,
       createdAt: Date.now(),
-      expiresAt: Date.now() + 2 * 60 * 1000 // 2 minutes
+      expiresAt: Date.now() + 2 * 60 * 1000
     };
 
-    storageService.set(OTP_STORAGE_KEY, session);
+    storageService.set(OTP_KEY, session);
 
-    console.log(`
-${channel === 'email' ? '📧' : '📱'} DEMO OTP SENT
-Channel: ${channel.toUpperCase()}
-Recipient: ${identifier}
-OTP: ${otp}
-Expires in: 2 minutes
-    `);
-
+    console.log(`[DEMO ${channel.toUpperCase()} OTP] Sent to ${identifier}: ${otp}`);
     return otp;
   },
 
   verifyOtp: (
     identifier: string,
-    channel: OtpChannel,
+    channel: 'email' | 'phone',
     enteredOtp: string
-  ): { success: boolean; message: string } => {
-    const session = storageService.get<OtpSession | null>(OTP_STORAGE_KEY, null);
+  ) => {
+    const session = storageService.get<OtpSession | null>(OTP_KEY, null);
 
     if (!session) {
-      return { success: false, message: 'No OTP session found. Please resend OTP.' };
+      throw new Error('No OTP session found. Please request OTP again.');
     }
 
     if (session.identifier !== identifier || session.channel !== channel) {
-      return { success: false, message: 'OTP recipient mismatch. Please resend OTP.' };
+      throw new Error('OTP recipient mismatch. Please request OTP again.');
     }
 
     if (Date.now() > session.expiresAt) {
-      storageService.remove(OTP_STORAGE_KEY);
-      return { success: false, message: 'OTP expired. Please resend OTP.' };
+      storageService.remove(OTP_KEY);
+      throw new Error('OTP expired. Please request a new one.');
     }
 
     if (session.otp !== enteredOtp.trim()) {
-      return { success: false, message: 'Invalid OTP.' };
+      throw new Error('Invalid OTP.');
     }
 
-    storageService.remove(OTP_STORAGE_KEY);
-    return { success: true, message: 'OTP verified successfully.' };
+    return true;
   },
 
-  clearOtpSession: () => {
-    storageService.remove(OTP_STORAGE_KEY);
-  },
-
-  getRemainingSeconds: (): number => {
-    const session = storageService.get<OtpSession | null>(OTP_STORAGE_KEY, null);
-    if (!session) return 0;
-
-    const remaining = Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000));
-    return remaining;
+  clearOtp: () => {
+    storageService.remove(OTP_KEY);
   }
 };

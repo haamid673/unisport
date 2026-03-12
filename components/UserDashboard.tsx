@@ -641,7 +641,7 @@ import {
 } from "../services/bookingService";
 import { aiEngine } from '../services/aiEngine';
 import { userService } from '../services/userService';
-import { Facility, Slot, User, Booking, SlotDemandPrediction, AIRecommendation } from '../types';
+import { Facility, Slot, User, Booking, SlotDemandPrediction, AIRecommendation, SelectedAmenity } from '../types';
 import { getAllBookings } from "../services/bookingService";
 import { useNavigate } from "react-router-dom";
 
@@ -651,7 +651,9 @@ interface UserDashboardProps {
     slotId: string;
     facilityId: string | undefined;
     date: string;
+    slotPrice: number;
     price: number;
+    selectedAmenities?: SelectedAmenity[];
   }) => void;
 }
 
@@ -817,11 +819,33 @@ const navigate = useNavigate();
 const handleBook = (slot: Slot) => {
   if (!onStartPayment) return;
 
+  const selected = new Date(selectedDate);
+  const todayCheck = new Date();
+  todayCheck.setHours(0, 0, 0, 0);
+
+  const maxCheck = new Date();
+  maxCheck.setHours(0, 0, 0, 0);
+  maxCheck.setDate(maxCheck.getDate() + 30);
+
+  selected.setHours(0, 0, 0, 0);
+
+  if (selected < todayCheck || selected > maxCheck) {
+    alert('Bookings are only allowed from today up to 30 days in advance.');
+    return;
+  }
+
+  const amenitiesTotal = selectedAmenities.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+
   onStartPayment({
     slotId: slot.id,
     facilityId: selectedFacility?.id,
     date: selectedDate,
-    price: slot.price
+    slotPrice: slot.price,
+    price: slot.price + amenitiesTotal,
+    selectedAmenities
   });
 };
 
@@ -872,6 +896,25 @@ const filteredFacilities = [...filteredFacilitiesBase].sort((a, b) => {
   return distanceA - distanceB;
 });
 
+//
+const formatDateInput = (date: Date) => {
+  return date.toISOString().split('T')[0];
+};
+
+const today = new Date();
+const maxBookingDate = new Date();
+maxBookingDate.setDate(today.getDate() + 30);
+
+const minDate = formatDateInput(today);
+const maxDate = formatDateInput(maxBookingDate);
+
+//amenity
+const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]);
+const amenitiesTotal = selectedAmenities.reduce(
+  (sum, item) => sum + item.price * item.quantity,
+  0
+);
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 font-sans">
       {/* Header & Location Banner */}
@@ -903,12 +946,14 @@ const filteredFacilities = [...filteredFacilitiesBase].sort((a, b) => {
 
           <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border-2 border-neutral-200 focus-within:border-orange-500 transition-colors">
              <i className="fas fa-calendar text-neutral-400"></i>
-             <input 
-               type="date" 
-               className="outline-none text-neutral-900 font-bold uppercase text-sm bg-transparent"
-               value={selectedDate}
-               onChange={(e) => setSelectedDate(e.target.value)}
-             />
+                <input
+                  type="date"
+                  className="outline-none text-neutral-900 font-bold uppercase text-sm bg-transparent"
+                  value={selectedDate}
+                  min={minDate}
+                  max={maxDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                />
           </div>
         </div>
       </div>
@@ -1042,7 +1087,7 @@ const filteredFacilities = [...filteredFacilitiesBase].sort((a, b) => {
             </div>
 
             {/* Right Side: Content */}
-            <div className="md:w-7/12 bg-white flex flex-col h-full">
+            <div className="md:w-7/12 bg-white flex flex-col h-[90vh] max-h-[90vh]">
               <div className="p-8 border-b border-neutral-100">
                 <div className="flex items-center justify-between mb-6">
                    <h4 className="font-black text-2xl text-neutral-900 uppercase tracking-tighter">Select Time Slot</h4>
@@ -1098,93 +1143,229 @@ const filteredFacilities = [...filteredFacilitiesBase].sort((a, b) => {
         </div>
 
               {/* Slots List */}
-              <div className="flex-1 overflow-y-auto p-8 pt-4">
-          <div className="space-y-3">
-            {slots.length > 0 ? (
-              slots.map(s => {
-                const pred = getSlotPrediction(s.id);
-                const isHigh = pred?.demandLevel === 'High';
-                const isAvailable = checkSlotAvailability(s.id, selectedDate);
-                const booked = !isAvailable;
+              {/* Slots List + Amenities */}
+              <div className="flex-1 overflow-y-auto p-8 pt-4 min-h-0">
+                <div className="space-y-3">
+                  {slots.length > 0 ? (
+                    slots.map(s => {
+                      const pred = getSlotPrediction(s.id);
+                      const isHigh = pred?.demandLevel === 'High';
+                      const isAvailable = checkSlotAvailability(s.id, selectedDate);
+                      const booked = !isAvailable;
 
-                return (
-                  <div
-                    key={s.id}
-                    onClick={() => setSelectedSlotInsight(pred || null)}
-                    className={`group cursor-pointer p-4 rounded-lg border-2 transition-all flex items-center justify-between ${
-                      selectedSlotInsight?.slotId === s.id
-                        ? 'border-orange-500 bg-orange-50'
-                        : booked
-                        ? 'bg-neutral-100 border-transparent opacity-50'
-                        : isHigh
-                        ? 'bg-white border-orange-100 hover:border-orange-500'
-                        : 'bg-white border-neutral-100 hover:border-black'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-lg font-black text-neutral-900">
-                          {s.time}
+                      return (
+                        <div
+                          key={s.id}
+                          onClick={() => setSelectedSlotInsight(pred || null)}
+                          className={`group cursor-pointer p-4 rounded-lg border-2 transition-all flex items-center justify-between ${
+                            selectedSlotInsight?.slotId === s.id
+                              ? 'border-orange-500 bg-orange-50'
+                              : booked
+                              ? 'bg-neutral-100 border-transparent opacity-50'
+                              : isHigh
+                              ? 'bg-white border-orange-100 hover:border-orange-500'
+                              : 'bg-white border-neutral-100 hover:border-black'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg font-black text-neutral-900">
+                                {s.time}
+                              </span>
+
+                              {isHigh && !booked && (
+                                <span className="text-[9px] font-black text-white uppercase tracking-wider bg-orange-500 px-1.5 py-0.5 rounded-sm">
+                                  Hot
+                                </span>
+                              )}
+                            </div>
+
+                            {pred?.reasoning && isHigh && !booked && (
+                              <p className="text-[10px] text-orange-600 font-bold uppercase tracking-wide mt-1">
+                                {pred.reasoning}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="text-right flex items-center gap-4">
+                            <div>
+                              <p className="font-black text-xl text-neutral-900">
+                                ₹{s.price}
+                              </p>
+
+                              {pred?.isSurge && !booked && (
+                                <p className="text-[8px] text-orange-500 font-black uppercase tracking-widest">
+                                  Surge
+                                </p>
+                              )}
+                            </div>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleBook(s);
+                              }}
+                              disabled={!isAvailable}
+                              className={`px-6 py-2 rounded-md text-xs font-black uppercase tracking-widest transition-all ${
+                                isAvailable
+                                  ? 'bg-black text-white group-hover:bg-orange-600'
+                                  : 'bg-neutral-300 text-neutral-500 cursor-not-allowed'
+                              }`}
+                            >
+                              {isAvailable ? 'Book' : 'Full'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-12 border-2 border-dashed border-neutral-200 rounded-lg">
+                      <p className="text-neutral-400 font-bold uppercase text-xs tracking-widest">
+                        No slots available
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Amenities Section */}
+                {selectedFacility?.amenityOptions &&
+                  selectedFacility.amenityOptions.filter(a => a.available !== false).length > 0 && (
+                    <div className="mt-8 border-t-2 border-neutral-100 pt-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-black text-lg text-neutral-900 uppercase tracking-tight">
+                          Add Amenities
+                        </h4>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                          Optional add-ons
                         </span>
+                      </div>
 
-                        {isHigh && !booked && (
-                          <span className="text-[9px] font-black text-white uppercase tracking-wider bg-orange-500 px-1.5 py-0.5 rounded-sm">
-                            Hot
+                      <div className="space-y-3">
+                        {selectedFacility.amenityOptions
+                          .filter(a => a.available !== false)
+                          .map(amenity => {
+                            const existing = selectedAmenities.find(
+                              a => a.amenityId === amenity.id
+                            );
+                            const quantity = existing?.quantity || 0;
+
+                            return (
+                              <div
+                                key={amenity.id}
+                                className="flex items-center justify-between p-4 rounded-lg border border-neutral-200 bg-neutral-50"
+                              >
+                                <div>
+                                  <p className="font-black text-xs uppercase tracking-wide text-neutral-900">
+                                    {amenity.name}
+                                  </p>
+                                  <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wide mt-1">
+                                    {amenity.type} • ₹{amenity.price}
+                                    {amenity.unit ? ` / ${amenity.unit}` : ''}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedAmenities(prev =>
+                                        prev
+                                          .map(item =>
+                                            item.amenityId === amenity.id
+                                              ? { ...item, quantity: item.quantity - 1 }
+                                              : item
+                                          )
+                                          .filter(item => item.quantity > 0)
+                                      );
+                                    }}
+                                    className="w-8 h-8 rounded-md bg-white border border-neutral-200 text-neutral-700 font-black hover:border-neutral-400"
+                                  >
+                                    -
+                                  </button>
+
+                                  <span className="w-8 text-center font-black text-sm text-neutral-900">
+                                    {quantity}
+                                  </span>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedAmenities(prev => {
+                                        const existingItem = prev.find(
+                                          item => item.amenityId === amenity.id
+                                        );
+
+                                        if (existingItem) {
+                                          return prev.map(item =>
+                                            item.amenityId === amenity.id
+                                              ? {
+                                                  ...item,
+                                                  quantity: item.quantity + 1
+                                                }
+                                              : item
+                                          );
+                                        }
+
+                                        return [
+                                          ...prev,
+                                          {
+                                            amenityId: amenity.id,
+                                            name: amenity.name,
+                                            price: amenity.price,
+                                            quantity: 1
+                                          }
+                                        ];
+                                      });
+                                    }}
+                                    className="w-8 h-8 rounded-md bg-neutral-900 text-white font-black hover:bg-orange-600"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+
+                      {/* Amenities Summary */}
+                      <div className="mt-5 p-4 rounded-lg bg-neutral-900 text-white">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                            Amenities Total
                           </span>
+                          <span className="text-lg font-black">
+                            ₹
+                            {selectedAmenities.reduce(
+                              (sum, item) => sum + item.price * item.quantity,
+                              0
+                            )}
+                          </span>
+                        </div>
+
+                        {selectedAmenities.length > 0 && (
+                          <div className="mt-3 space-y-1">
+                            {selectedAmenities.map(item => (
+                              <div
+                                key={item.amenityId}
+                                className="flex justify-between text-xs"
+                              >
+                                <span>
+                                  {item.name} × {item.quantity}
+                                </span>
+                                <span>₹{item.price * item.quantity}</span>
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
-
-                      {pred?.reasoning && isHigh && !booked && (
-                        <p className="text-[10px] text-orange-600 font-bold uppercase tracking-wide mt-1">
-                          {pred.reasoning}
-                        </p>
-                      )}
+                      
                     </div>
-
-                    <div className="text-right flex items-center gap-4">
-                      <div>
-                        <p className="font-black text-xl text-neutral-900">
-                          ₹{s.price}
-                        </p>
-
-                        {pred?.isSurge && !booked && (
-                          <p className="text-[8px] text-orange-500 font-black uppercase tracking-widest">
-                            Surge
-                          </p>
-                        )}
-                      </div>
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleBook(s);
-                        }}
-                        disabled={!isAvailable}
-                        className={`px-6 py-2 rounded-md text-xs font-black uppercase tracking-widest transition-all ${
-                          isAvailable
-                            ? 'bg-black text-white group-hover:bg-orange-600'
-                            : 'bg-neutral-300 text-neutral-500 cursor-not-allowed'
-                        }`}
-                      >
-                        {isAvailable ? 'Book' : 'Full'}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="text-center py-12 border-2 border-dashed border-neutral-200 rounded-lg">
-                <p className="text-neutral-400 font-bold uppercase text-xs tracking-widest">
-                  No slots available
-                </p>
+                  )}
               </div>
-            )}
+
+            </div>
           </div>
         </div>
-
-      </div>
-    </div>
-  </div>
 )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

@@ -2,6 +2,7 @@
 import { Facility, Slot, AuditLog, FacilityStatus } from '../types';
 import { storageService, STORAGE_KEYS } from './storageService';
 import { userService } from './userService';
+import { Facility, Slot, AuditLog, FacilityStatus, FacilityAmenity } from '../types';
 
 
 
@@ -303,8 +304,14 @@ const initialFacilities: Facility[] = [
     rating: 4.7, 
     status: 'approved', 
     latitude: 8.5222,
-    longitude: 76.9605
+    longitude: 76.9605, 
+    amenityOptions: [
+    { id: 'am5', name: 'Protein Shake', type: 'fnb', price: 150, unit: 'item', available: true },
+    { id: 'am6', name: 'Steam Room', type: 'wellness', price: 250, unit: 'session', available: true },
+    { id: 'am7', name: 'Recovery Chair', type: 'recovery', price: 180, unit: '15 min', available: true }
+  ]
   },
+
   { 
     id: 't2', 
     name: 'Technopark Turf Arena', 
@@ -498,6 +505,62 @@ export const facilityService = {
     slots[index] = { ...slots[index], ...updates };
 
     storageService.set(STORAGE_KEYS.SLOTS, slots);
-  }
+  },
+
+    addAmenityToFacility: (
+    facilityId: string,
+    amenity: Omit<FacilityAmenity, 'id'>
+  ): void => {
+    const facilities = storageService.get<Facility[]>(STORAGE_KEYS.FACILITIES, initialFacilities);
+    const index = facilities.findIndex(f => f.id === facilityId);
+
+    if (index === -1) return;
+
+    const newAmenity: FacilityAmenity = {
+      ...amenity,
+      id: `amenity_${Date.now()}`,
+      available: amenity.available ?? true
+    };
+
+    if (!facilities[index].amenityOptions) {
+      facilities[index].amenityOptions = [];
+    }
+
+    facilities[index].amenityOptions!.push(newAmenity);
+    storageService.set(STORAGE_KEYS.FACILITIES, facilities);
+  },
+
+  updateAmenityInFacility: (
+    facilityId: string,
+    amenityId: string,
+    updates: Partial<FacilityAmenity>
+  ): void => {
+    const facilities = storageService.get<Facility[]>(STORAGE_KEYS.FACILITIES, initialFacilities);
+    const facilityIndex = facilities.findIndex(f => f.id === facilityId);
+
+    if (facilityIndex === -1 || !facilities[facilityIndex].amenityOptions) return;
+
+    facilities[facilityIndex].amenityOptions = facilities[facilityIndex].amenityOptions!.map(a =>
+      a.id === amenityId ? { ...a, ...updates } : a
+    );
+
+    storageService.set(STORAGE_KEYS.FACILITIES, facilities);
+  },
+
+  deleteAmenityFromFacility: (
+    facilityId: string,
+    amenityId: string
+  ): void => {
+    const facilities = storageService.get<Facility[]>(STORAGE_KEYS.FACILITIES, initialFacilities);
+    const facilityIndex = facilities.findIndex(f => f.id === facilityId);
+
+    if (facilityIndex === -1 || !facilities[facilityIndex].amenityOptions) return;
+
+    facilities[facilityIndex].amenityOptions = facilities[facilityIndex].amenityOptions!.filter(
+      a => a.id !== amenityId
+    );
+
+    storageService.set(STORAGE_KEYS.FACILITIES, facilities);
+  },
 
 };

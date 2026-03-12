@@ -268,6 +268,10 @@
 
 
 
+/* 
+
+
+
 import React, { useState, useEffect } from 'react';
 import { facilityService } from '../services/facilityService';
 import { getAllBookings } from '../services/bookingService';
@@ -1387,6 +1391,1118 @@ Delete
     </div>
   </div>
 )}
+    </div>
+  );
+};
+
+export default OwnerDashboard;
+
+*/
+
+
+import React, { useState, useEffect } from 'react';
+import { facilityService } from '../services/facilityService';
+import { getAllBookings } from '../services/bookingService';
+import { Facility, Slot, User, Booking, FacilityAmenity } from '../types';
+
+interface OwnerDashboardProps {
+  user: User;
+}
+
+const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user }) => {
+  const [myFacilities, setMyFacilities] = useState<Facility[]>([]);
+  const [selectedFac, setSelectedFac] = useState<Facility | null>(null);
+  const [facSlots, setFacSlots] = useState<Slot[]>([]);
+  const [allBookings, setAllBookings] = useState<Booking[]>([]);
+  
+
+  const [amenityForm, setAmenityForm] = useState({
+    name: '',
+    type: 'fnb' as FacilityAmenity['type'],
+    price: '',
+    unit: ''
+  });
+  
+  const [showAmenityModal, setShowAmenityModal] = useState(false);
+  const [showSlotModal, setShowSlotModal] = useState(false);
+  const [showVenueModal, setShowVenueModal] = useState(false);
+
+  const [slotForm, setSlotForm] = useState({
+    time: '',
+    price: ''
+  });
+
+  const [venueForm, setVenueForm] = useState({
+    name: '',
+    sport: '',
+    location: '',
+    city: user.city || 'Chennai',
+    basePrice: '',
+    imageUrl: ''
+  });
+
+  useEffect(() => {
+    refreshData();
+  }, [user.id]);
+
+  const refreshData = () => {
+    const facilities = facilityService
+      .getAllFacilities(true)
+      .filter(f => f.ownerId === user.id);
+
+    setMyFacilities(facilities);
+    setAllBookings(getAllBookings());
+
+    const currentSelected =
+      selectedFac
+        ? facilities.find(f => f.id === selectedFac.id) || null
+        : facilities[0] || null;
+
+    setSelectedFac(currentSelected);
+
+    if (currentSelected) {
+      setFacSlots(facilityService.getSlotsByFacility(currentSelected.id));
+    } else {
+      setFacSlots([]);
+    }
+  };
+
+  const resetAmenityForm = () => {
+    setAmenityForm({
+      name: '',
+      type: 'fnb',
+      price: '',
+      unit: ''
+    });
+  };
+
+  const resetSlotForm = () => {
+  setSlotForm({
+    time: '',
+    price: ''
+  });
+};
+
+const resetVenueForm = () => {
+  setVenueForm({
+    name: '',
+    sport: '',
+    location: '',
+    city: user.city || 'Chennai',
+    basePrice: '',
+    imageUrl: ''
+  });
+};
+
+  const handleAddAmenity = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFac) return;
+
+    if (!amenityForm.name.trim() || !amenityForm.price.trim()) {
+      alert('Please fill amenity name and price.');
+      return;
+    }
+
+    facilityService.addAmenityToFacility(selectedFac.id, {
+      name: amenityForm.name.trim(),
+      type: amenityForm.type,
+      price: Number(amenityForm.price),
+      unit: amenityForm.unit.trim(),
+      available: true
+    });
+
+    resetAmenityForm();
+    setShowAmenityModal(false);
+    refreshData();
+  };
+
+  const handleToggleAmenityAvailability = (amenity: FacilityAmenity) => {
+    if (!selectedFac) return;
+
+    facilityService.updateAmenityInFacility(selectedFac.id, amenity.id, {
+      available: !amenity.available
+    });
+
+    refreshData();
+  };
+
+  const handleDeleteAmenity = (amenityId: string) => {
+    if (!selectedFac) return;
+    if (!confirm('Delete this amenity?')) return;
+
+    facilityService.deleteAmenityFromFacility(selectedFac.id, amenityId);
+    refreshData();
+  };
+
+  const handleAddSlot = (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!selectedFac) return;
+
+  if (!slotForm.time.trim() || !slotForm.price.trim()) {
+    alert('Please fill slot time and price.');
+    return;
+  }
+
+  facilityService.addSlot({
+    facilityId: selectedFac.id,
+    time: slotForm.time.trim(),
+    price: Number(slotForm.price),
+    surgeEnabled: false,
+    surgeMultiplier: 1
+  });
+
+  resetSlotForm();
+  setShowSlotModal(false);
+  refreshData();
+};
+
+const handleAddVenue = (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (
+    !venueForm.name.trim() ||
+    !venueForm.sport.trim() ||
+    !venueForm.location.trim() ||
+    !venueForm.city.trim() ||
+    !venueForm.basePrice.trim()
+  ) {
+    alert('Please fill all required venue details.');
+    return;
+  }
+
+  facilityService.addFacility({
+    name: venueForm.name.trim(),
+    sport: venueForm.sport.trim(),
+    location: venueForm.location.trim(),
+    city: venueForm.city.trim(),
+    basePrice: Number(venueForm.basePrice),
+    imageUrl: venueForm.imageUrl.trim(),
+    ownerId: user.id,
+    status: 'approved'
+  });
+
+  resetVenueForm();
+  setShowVenueModal(false);
+  refreshData();
+};
+
+  const analyzeDemand = (slotId: string) => {
+    const confirmed = allBookings.filter(
+      b => b.slotId === slotId && b.status === "confirmed"
+    );
+
+    const uniqueDays = [...new Set(confirmed.map(b => b.bookingDate))].sort(
+      (a, b) => new Date(b).getTime() - new Date(a).getTime()
+    );
+
+    if (uniqueDays.length === 0) {
+      return {
+        demandScore: 0,
+        streak: 0,
+        reason: "No booking activity"
+      };
+    }
+
+    let streak = 1;
+
+    for (let i = 0; i < uniqueDays.length - 1; i++) {
+      const current = new Date(uniqueDays[i]);
+      const next = new Date(uniqueDays[i + 1]);
+
+      const diff =
+        (current.getTime() - next.getTime()) / (1000 * 60 * 60 * 24);
+
+      if (diff === 1) streak++;
+      else break;
+    }
+
+    const demandScore = Math.min(100, streak * 20);
+
+    let reason = "Stable demand";
+    if (streak >= 5) reason = `${streak}-day booking streak`;
+    else if (streak >= 3) reason = `Rising trend (${streak} days)`;
+
+    return { demandScore, streak, reason };
+  };
+
+  const calculateSurgeMultiplier = (demandScore: number) => {
+    const baseSurge = 0.05;
+    const surgeRange = 0.15;
+    const surgePercent = baseSurge + (demandScore / 100) * surgeRange;
+    return 1 + surgePercent;
+  };
+
+  const enableSurge = (slot: Slot) => {
+    const demand = analyzeDemand(slot.id);
+    const multiplier = calculateSurgeMultiplier(demand.demandScore);
+
+    facilityService.updateSlot(slot.id, {
+      price: Math.round(slot.price * multiplier),
+      surgeEnabled: true,
+      surgeMultiplier: multiplier
+    });
+
+    refreshData();
+  };
+
+  const disableSurge = (slot: Slot) => {
+    const original = Math.round(slot.price / (slot.surgeMultiplier || 1));
+
+    facilityService.updateSlot(slot.id, {
+      price: original,
+      surgeEnabled: false,
+      surgeMultiplier: 1
+    });
+
+    refreshData();
+  };
+
+  const facilitySlotIds = facSlots.map(s => s.id);
+
+  const confirmedBookings = allBookings.filter(
+    b => facilitySlotIds.includes(b.slotId) && b.status === "confirmed"
+  );
+
+  const totalRevenue = confirmedBookings.reduce((sum, b) => {
+    return sum + (b.finalPrice || 0);
+  }, 0);
+
+  const totalBookingsCount = confirmedBookings.length;
+  const activeSlotsCount = facSlots.length;
+  const availableAmenitiesCount = selectedFac?.amenityOptions?.filter(
+    a => a.available !== false
+  ).length || 0;
+
+  const selectedFacilityBookings = confirmedBookings
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    const aiRevenueSuggestions = facSlots.map(slot => {
+  const demand = analyzeDemand(slot.id);
+  const slotBookings = confirmedBookings.filter(b => b.slotId === slot.id);
+  const occupancy = facSlots.length > 0 ? Math.min(100, slotBookings.length * 25) : 0;
+
+  if (occupancy < 40) {
+    return {
+      slotId: slot.id,
+      time: slot.time,
+      status: 'UNDERPERFORMING',
+      action: `RUN 15% PROMO TO INCREASE OCCUPANCY FROM ${occupancy.toFixed(2)}%`,
+      impact: '+15% REVENUE IMPACT'
+    };
+  }
+
+  if (demand.demandScore >= 60) {
+    return {
+      slotId: slot.id,
+      time: slot.time,
+      status: 'HIGH DEMAND',
+      action: 'CONSIDER PREMIUM PRICING FOR THIS SLOT',
+      impact: '+8% REVENUE IMPACT'
+    };
+  }
+
+  return {
+    slotId: slot.id,
+    time: slot.time,
+    status: 'STABLE',
+    action: 'MAINTAIN CURRENT PRICING AND MONITOR BOOKING FLOW',
+    impact: '+4% REVENUE IMPACT'
+  };
+});
+
+const weekDays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+const getDayLabel = (dateString: string) => {
+  const day = new Date(dateString).getDay();
+  const mapped = (day + 6) % 7;
+  return weekDays[mapped];
+};
+
+const heatmapSlots = facSlots.slice(0, 2);
+
+const heatmapRows = weekDays.map(day => ({
+  day,
+  cells: heatmapSlots.map(slot => {
+    const count = confirmedBookings.filter(
+      b => b.slotId === slot.id && getDayLabel(b.bookingDate) === day
+    ).length;
+
+    return count;
+  })
+}));
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-8 font-sans">
+
+    <div className="flex items-end justify-between gap-6 mb-12 border-b-2 border-neutral-900 pb-6">
+  <div>
+    <h2 className="text-5xl font-black uppercase italic tracking-tighter">
+      Owner Dashboard
+    </h2>
+    <p className="text-neutral-500 font-medium mt-2 tracking-wide uppercase text-xs">
+      Manage your facilities and pricing.
+    </p>
+  </div>
+
+  <button
+    onClick={() => setShowVenueModal(true)}
+    className="px-5 py-3 rounded-lg bg-neutral-900 text-white text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-colors"
+  >
+    + New Venue
+  </button>
+</div>
+
+      <div className="grid grid-cols-4 gap-8">
+        {/* Sidebar */}
+        <div className="col-span-1 space-y-4">
+          <div className="flex items-center justify-between mb-2">
+    <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
+      Inventory
+    </p>
+
+    <div className="flex items-center gap-2">
+      <span className="px-2 py-1 rounded-sm bg-neutral-100 text-neutral-500 text-[8px] font-black uppercase tracking-widest">
+        {myFacilities.length} total
+      </span>
+      <span className="px-2 py-1 rounded-sm bg-emerald-50 text-emerald-700 border border-emerald-100 text-[8px] font-black uppercase tracking-widest">
+        Verified Ownership
+      </span>
+    </div>
+  </div>
+          {myFacilities.map(f => (
+            <div
+              key={f.id}
+              onClick={() => {
+                setSelectedFac(f);
+                setFacSlots(facilityService.getSlotsByFacility(f.id));
+              }}
+              className={`p-4 rounded-lg border-2 cursor-pointer ${
+                selectedFac?.id === f.id
+                  ? 'bg-neutral-900 text-white border-neutral-900'
+                  : 'bg-white border-neutral-200'
+              }`}
+            >
+              <p className="font-bold uppercase">{f.name}</p>
+              <p className="text-xs text-neutral-400">
+                {f.sport} • {f.location}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Right Panel */}
+        <div className="col-span-3 space-y-8">
+          {selectedFac && (
+            <>
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-white p-6 rounded-lg border-2">
+                  <p className="text-xs text-neutral-400 uppercase tracking-widest font-black">
+                    Estimated Revenue
+                  </p>
+                  <p className="text-3xl font-black mt-2">
+                    ₹{totalRevenue.toFixed(2)}
+                  </p>
+                </div>
+
+                <div className="bg-white p-6 rounded-lg border-2">
+                  <p className="text-xs text-neutral-400 uppercase tracking-widest font-black">
+                    Active Slots
+                  </p>
+                  <p className="text-3xl font-black mt-2">
+                    {activeSlotsCount}
+                  </p>
+                </div>
+
+                <div className="bg-white p-6 rounded-lg border-2">
+                  <p className="text-xs text-neutral-400 uppercase tracking-widest font-black">
+                    Total Bookings
+                  </p>
+                  <p className="text-3xl font-black mt-2 text-orange-600">
+                    {totalBookingsCount}
+                  </p>
+                </div>
+
+                <div className="bg-white p-6 rounded-lg border-2">
+                  <p className="text-xs text-neutral-400 uppercase tracking-widest font-black">
+                    Amenities
+                  </p>
+                  <p className="text-3xl font-black mt-2">
+                    {availableAmenitiesCount}
+                  </p>
+                </div>
+              </div>
+
+{/* ai revenue intelligence */}
+
+
+            <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-5 text-white">
+  <div className="flex items-center gap-3 mb-5">
+    <div className="w-8 h-8 rounded-sm bg-orange-600 flex items-center justify-center">
+      <i className="fas fa-brain text-white text-sm"></i>
+    </div>
+    <div>
+      <h4 className="font-black uppercase italic tracking-tight">
+        AI Revenue Intelligence
+      </h4>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 mt-1">
+        Real-time optimization suggestions
+      </p>
+    </div>
+  </div>
+
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+    {aiRevenueSuggestions.slice(0, 2).map(item => (
+      <div
+        key={item.slotId}
+        className="border border-neutral-700 rounded-md p-4 bg-neutral-800/60"
+      >
+        <div className="flex justify-between items-start gap-3 mb-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
+            {item.time}
+          </p>
+
+          <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-sm ${
+            item.status === 'UNDERPERFORMING'
+              ? 'bg-red-900/40 text-red-300'
+              : item.status === 'HIGH DEMAND'
+              ? 'bg-orange-900/40 text-orange-300'
+              : 'bg-neutral-700 text-neutral-200'
+          }`}>
+            {item.status}
+          </span>
+        </div>
+
+        <p className="text-xs font-black uppercase leading-snug">
+          {item.action}
+        </p>
+
+        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400 mt-3">
+          ↗ {item.impact}
+        </p>
+      </div>
+    ))}
+  </div>
+</div>
+
+
+{/*weeklu occupanycy*/}
+
+
+    <div className="bg-white p-6 rounded-lg border-2">
+  <h4 className="font-black uppercase mb-6">
+    Weekly Occupancy Heatmap
+  </h4>
+
+  {heatmapSlots.length > 0 ? (
+    <div className="space-y-3">
+      <div className="grid grid-cols-[60px_repeat(2,minmax(0,1fr))] gap-2 items-center">
+        <div></div>
+        {heatmapSlots.map(slot => (
+          <div
+            key={slot.id}
+            className="text-center text-[10px] font-black uppercase tracking-widest text-neutral-400"
+          >
+            {slot.time}
+          </div>
+        ))}
+      </div>
+
+      {heatmapRows.map(row => (
+        <div
+          key={row.day}
+          className="grid grid-cols-[60px_repeat(2,minmax(0,1fr))] gap-2 items-center"
+        >
+          <div className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
+            {row.day}
+          </div>
+
+          {row.cells.map((count, idx) => (
+            <div
+              key={`${row.day}-${idx}`}
+              className={`h-8 rounded-sm ${
+                count >= 3
+                  ? 'bg-neutral-900'
+                  : count >= 2
+                  ? 'bg-neutral-500'
+                  : count >= 1
+                  ? 'bg-neutral-200'
+                  : 'bg-neutral-100'
+              }`}
+            ></div>
+          ))}
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div className="text-center py-8 border-2 border-dashed border-neutral-200 rounded-lg">
+      <p className="text-neutral-400 font-bold uppercase text-xs tracking-widest">
+        No slots available for heatmap
+      </p>
+    </div>
+  )}
+</div>
+
+              {/* Surge Pricing */}
+              <div className="bg-white p-6 rounded-lg border-2">
+                <h4 className="font-black uppercase mb-6">
+                  Adaptive Surge Pricing
+                </h4>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {facSlots.map(slot => {
+                    const demand = analyzeDemand(slot.id);
+                    const projectedMultiplier =
+                      calculateSurgeMultiplier(demand.demandScore);
+
+                    const projectedPercent =
+                      Math.round((projectedMultiplier - 1) * 100);
+
+                    return (
+                      <div
+                        key={slot.id}
+                        className="p-4 rounded-lg border-2 bg-neutral-50"
+                      >
+                        <p className="font-black uppercase">{slot.time}</p>
+
+                        <p className="text-lg mt-1">₹{slot.price}</p>
+
+                        <p className="text-[9px] mt-2 uppercase font-bold text-neutral-400">
+                          Demand Score: {demand.demandScore}%
+                        </p>
+
+                        <p className="text-[9px] text-neutral-500">
+                          {demand.reason}
+                        </p>
+
+                        {!slot.surgeEnabled ? (
+                          <>
+                            <p className="text-[10px] text-orange-600 font-black uppercase mt-3">
+                              Suggested Surge: +{projectedPercent}%
+                            </p>
+
+                            <button
+                              onClick={() => enableSurge(slot)}
+                              className="mt-3 px-5 py-2 rounded-xl bg-neutral-900 text-white text-[10px] font-black uppercase tracking-widest border-2 border-neutral-900 hover:bg-orange-600 hover:border-orange-700 transition-all duration-150 active:scale-95"
+                            >
+                              Enable Surge
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => disableSurge(slot)}
+                            className="mt-3 px-5 py-2 rounded-xl bg-white text-red-600 text-[10px] font-black uppercase tracking-widest border-2 border-red-600 hover:bg-red-600 hover:text-white transition-all duration-150 active:scale-95"
+                          >
+                            Disable Surge
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+
+
+<div className="bg-white p-6 rounded-lg border-2">
+  <div className="flex justify-between items-center mb-6">
+    <h4 className="font-black uppercase">
+      Slot Configuration
+    </h4>
+
+    <button
+      onClick={() => setShowSlotModal(true)}
+      className="px-4 py-2 rounded-md bg-neutral-900 text-white text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-colors"
+    >
+      + Add Slot
+    </button>
+  </div>
+
+  {facSlots.length > 0 ? (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {facSlots.map(slot => (
+        <div
+          key={slot.id}
+          className="p-4 rounded-lg border border-neutral-200 bg-neutral-50"
+        >
+          <div className="flex justify-between items-start gap-3">
+            <div>
+              <p className="font-black uppercase text-sm text-neutral-900">
+                {slot.time}
+              </p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 mt-1">
+                Base Price: ₹{slot.price}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 text-neutral-300">
+              <i className="fas fa-pen-to-square text-xs"></i>
+              <i className="fas fa-trash text-xs"></i>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div className="text-center py-8 border-2 border-dashed border-neutral-200 rounded-lg">
+      <p className="text-neutral-400 font-bold uppercase text-xs tracking-widest">
+        No slots configured for this facility
+      </p>
+    </div>
+  )}
+</div>
+
+
+              {/* Amenities */}
+              <div className="bg-white p-6 rounded-lg border-2">
+                <h4 className="font-black uppercase mb-6">
+                  Facility Amenities
+                </h4>
+
+                <div className="mb-6">
+                  <button
+                    onClick={() => setShowAmenityModal(true)}
+                    className="px-5 py-3 rounded-xl bg-neutral-900 text-white text-[10px] font-black uppercase tracking-widest border-2 border-neutral-900 hover:bg-orange-600 hover:border-orange-700 transition-all duration-150 active:scale-95"
+                  >
+                    Add Amenity
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {selectedFac.amenityOptions &&
+                  selectedFac.amenityOptions.length > 0 ? (
+                    selectedFac.amenityOptions.map(amenity => (
+                      <div
+                        key={amenity.id}
+                        className="flex items-center justify-between p-4 rounded-lg border border-neutral-200 bg-neutral-50"
+                      >
+                        <div>
+                          <p className="font-black uppercase text-sm text-neutral-900">
+                            {amenity.name}
+                          </p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 mt-1">
+                            {amenity.type} • ₹{amenity.price}
+                            {amenity.unit ? ` / ${amenity.unit}` : ''}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`px-2 py-1 rounded-sm text-[9px] font-black uppercase tracking-widest ${
+                              amenity.available !== false
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-neutral-200 text-neutral-600'
+                            }`}
+                          >
+                            {amenity.available !== false
+                              ? 'Available'
+                              : 'Unavailable'}
+                          </span>
+
+                          <button
+                            onClick={() =>
+                              handleToggleAmenityAvailability(amenity)
+                            }
+                            className="px-3 py-2 rounded-md bg-neutral-900 text-white text-[10px] font-black uppercase tracking-widest hover:bg-orange-600"
+                          >
+                            Toggle
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteAmenity(amenity.id)}
+                            className="px-3 py-2 rounded-md bg-red-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-red-700"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 border-2 border-dashed border-neutral-200 rounded-lg">
+                      <p className="text-neutral-400 font-bold uppercase text-xs tracking-widest">
+                        No amenities added for this facility
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Booking Audit */}
+<div className="bg-white rounded-lg border-2 border-neutral-200 overflow-hidden">
+  <div className="px-6 py-5 border-b border-neutral-100 flex justify-between items-center">
+    <h4 className="font-black uppercase text-sm">
+      Customer Bookings Audit
+    </h4>
+    <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+      DB_RELATION • {selectedFac.id}
+    </span>
+  </div>
+
+  {selectedFacilityBookings.length > 0 ? (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left">
+        <thead className="bg-neutral-50">
+          <tr>
+            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+              Date
+            </th>
+            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+              Time Slot
+            </th>
+            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+              User Reference
+            </th>
+            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+              Status
+            </th>
+          </tr>
+        </thead>
+
+        <tbody className="divide-y divide-neutral-100">
+          {selectedFacilityBookings.map(booking => {
+            const slot = facSlots.find(s => s.id === booking.slotId);
+
+            return (
+              <tr key={booking.id}>
+                <td className="px-4 py-4 text-sm font-bold text-neutral-900">
+                  {booking.bookingDate}
+                </td>
+                <td className="px-4 py-4 text-sm text-neutral-600">
+                  {slot?.time || 'Unknown Slot'}
+                </td>
+                <td className="px-4 py-4 text-xs text-neutral-400 font-mono">
+                  {booking.userId}
+                </td>
+                <td className="px-4 py-4">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">
+                    ● CONFIRMED
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  ) : (
+    <div className="p-8 text-center">
+      <p className="text-neutral-400 font-bold uppercase text-xs tracking-widest">
+        No confirmed bookings yet
+      </p>
+    </div>
+  )}
+</div>
+</>
+)}
+</div>
+</div>
+
+      {/* Add Amenity Modal */}
+      {showAmenityModal && selectedFac && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-neutral-900/80 backdrop-blur-sm"
+            onClick={() => {
+              setShowAmenityModal(false);
+              resetAmenityForm();
+            }}
+          ></div>
+
+          <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border-2 border-neutral-200 p-8 animate-in zoom-in-95 duration-200">
+            <button
+              onClick={() => {
+                setShowAmenityModal(false);
+                resetAmenityForm();
+              }}
+              className="absolute top-4 right-4 w-10 h-10 rounded-full bg-neutral-900 text-white hover:bg-orange-600 transition-colors flex items-center justify-center"
+            >
+              <i className="fas fa-times text-sm"></i>
+            </button>
+
+            <h3 className="text-3xl font-black uppercase italic tracking-tight text-neutral-900 mb-2">
+              Add Amenity
+            </h3>
+            <p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-8">
+              Configure add-ons for {selectedFac.name}
+            </p>
+
+            <form
+              onSubmit={handleAddAmenity}
+              className="grid grid-cols-1 md:grid-cols-2 gap-4"
+            >
+              <input
+                type="text"
+                placeholder="Amenity Name"
+                value={amenityForm.name}
+                onChange={e =>
+                  setAmenityForm(prev => ({
+                    ...prev,
+                    name: e.target.value
+                  }))
+                }
+                className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
+              />
+
+              <select
+                value={amenityForm.type}
+                onChange={e =>
+                  setAmenityForm(prev => ({
+                    ...prev,
+                    type: e.target.value as FacilityAmenity['type']
+                  }))
+                }
+                className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500 bg-white"
+              >
+                <option value="fnb">F&B</option>
+                <option value="recovery">Recovery</option>
+                <option value="shower">Shower</option>
+                <option value="equipment">Equipment</option>
+                <option value="wellness">Wellness</option>
+                <option value="other">Other</option>
+              </select>
+
+              <input
+                type="number"
+                placeholder="Price"
+                value={amenityForm.price}
+                onChange={e =>
+                  setAmenityForm(prev => ({
+                    ...prev,
+                    price: e.target.value
+                  }))
+                }
+                className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
+              />
+
+              <input
+                type="text"
+                placeholder="Unit (item / 15 min / session)"
+                value={amenityForm.unit}
+                onChange={e =>
+                  setAmenityForm(prev => ({
+                    ...prev,
+                    unit: e.target.value
+                  }))
+                }
+                className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
+              />
+
+              <div className="md:col-span-2 flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAmenityModal(false);
+                    resetAmenityForm();
+                  }}
+                  className="flex-1 px-4 py-3 rounded-lg bg-neutral-100 text-neutral-700 font-black uppercase tracking-widest text-xs hover:bg-neutral-200 transition-colors"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-3 rounded-lg bg-neutral-900 text-white font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-colors"
+                >
+                  Save Amenity
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showSlotModal && selectedFac && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className="absolute inset-0 bg-neutral-900/80 backdrop-blur-sm"
+      onClick={() => {
+        setShowSlotModal(false);
+        resetSlotForm();
+      }}
+    ></div>
+
+    <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border-2 border-neutral-200 p-8 animate-in zoom-in-95 duration-200">
+      <button
+        onClick={() => {
+          setShowSlotModal(false);
+          resetSlotForm();
+        }}
+        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-neutral-900 text-white hover:bg-orange-600 transition-colors flex items-center justify-center"
+      >
+        <i className="fas fa-times text-sm"></i>
+      </button>
+
+      <h3 className="text-3xl font-black uppercase italic tracking-tight text-neutral-900 mb-2">
+        Add Slot
+      </h3>
+      <p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-8">
+        Configure slot for {selectedFac.name}
+      </p>
+
+      <form onSubmit={handleAddSlot} className="space-y-4">
+        <input
+          type="text"
+          placeholder="Example: 08:00 AM - 09:00 AM"
+          value={slotForm.time}
+          onChange={(e) =>
+            setSlotForm(prev => ({ ...prev, time: e.target.value }))
+          }
+          className="w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
+        />
+
+        <input
+          type="number"
+          placeholder="Slot Price"
+          value={slotForm.price}
+          onChange={(e) =>
+            setSlotForm(prev => ({ ...prev, price: e.target.value }))
+          }
+          className="w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
+        />
+
+        <div className="flex gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setShowSlotModal(false);
+              resetSlotForm();
+            }}
+            className="flex-1 px-4 py-3 rounded-lg bg-neutral-100 text-neutral-700 font-black uppercase tracking-widest text-xs hover:bg-neutral-200 transition-colors"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            className="flex-1 px-4 py-3 rounded-lg bg-neutral-900 text-white font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-colors"
+          >
+            Save Slot
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
+
+
+{showVenueModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className="absolute inset-0 bg-neutral-900/80 backdrop-blur-sm"
+      onClick={() => {
+        setShowVenueModal(false);
+        resetVenueForm();
+      }}
+    ></div>
+
+    <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border-2 border-neutral-200 p-8 animate-in zoom-in-95 duration-200">
+      <button
+        onClick={() => {
+          setShowVenueModal(false);
+          resetVenueForm();
+        }}
+        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-neutral-900 text-white hover:bg-orange-600 transition-colors flex items-center justify-center"
+      >
+        <i className="fas fa-times text-sm"></i>
+      </button>
+
+      <h3 className="text-3xl font-black uppercase italic tracking-tight text-neutral-900 mb-2">
+        Add New Venue
+      </h3>
+      <p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-8">
+        Register a new facility under your ownership
+      </p>
+
+      <form onSubmit={handleAddVenue} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input
+          type="text"
+          placeholder="Facility Name"
+          value={venueForm.name}
+          onChange={(e) =>
+            setVenueForm(prev => ({ ...prev, name: e.target.value }))
+          }
+          className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
+        />
+
+        <input
+          type="text"
+          placeholder="Sport"
+          value={venueForm.sport}
+          onChange={(e) =>
+            setVenueForm(prev => ({ ...prev, sport: e.target.value }))
+          }
+          className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
+        />
+
+        <input
+          type="text"
+          placeholder="Location"
+          value={venueForm.location}
+          onChange={(e) =>
+            setVenueForm(prev => ({ ...prev, location: e.target.value }))
+          }
+          className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
+        />
+
+        <input
+          type="text"
+          placeholder="City"
+          value={venueForm.city}
+          onChange={(e) =>
+            setVenueForm(prev => ({ ...prev, city: e.target.value }))
+          }
+          className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
+        />
+
+        <input
+          type="number"
+          placeholder="Base Price"
+          value={venueForm.basePrice}
+          onChange={(e) =>
+            setVenueForm(prev => ({ ...prev, basePrice: e.target.value }))
+          }
+          className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
+        />
+
+        <input
+          type="text"
+          placeholder="Image URL (optional)"
+          value={venueForm.imageUrl}
+          onChange={(e) =>
+            setVenueForm(prev => ({ ...prev, imageUrl: e.target.value }))
+          }
+          className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
+        />
+
+        <div className="md:col-span-2 flex gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setShowVenueModal(false);
+              resetVenueForm();
+            }}
+            className="flex-1 px-4 py-3 rounded-lg bg-neutral-100 text-neutral-700 font-black uppercase tracking-widest text-xs hover:bg-neutral-200 transition-colors"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            className="flex-1 px-4 py-3 rounded-lg bg-neutral-900 text-white font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-colors"
+          >
+            Save Venue
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
+
     </div>
   );
 };

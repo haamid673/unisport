@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { User } from "../types";
+import { User, SelectedAmenity } from "../types";
 import { createBookingTransactional } from "../services/bookingService";
 import { paymentService } from "../services/paymentService";
 
@@ -9,7 +9,9 @@ interface PaymentPageProps {
     slotId: string;
     facilityId: string | undefined;
     date: string;
+    slotPrice: number;
     price: number;
+    selectedAmenities?: SelectedAmenity[];
   };
   onSuccess: () => void;
   onCancel: () => void;
@@ -25,6 +27,14 @@ const PaymentPage: React.FC<PaymentPageProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
 
+  const amenitiesTotal = (data.selectedAmenities || []).reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+
+  const slotPrice = data.slotPrice;
+  const totalAmount = data.price;
+
   const handlePayment = () => {
     setLoading(true);
 
@@ -35,25 +45,24 @@ const PaymentPage: React.FC<PaymentPageProps> = ({
         "_" +
         Date.now().toString().slice(-4);
 
-      // Create booking
       createBookingTransactional(
         data.slotId,
         user.id,
-        data.date
+        data.date,
+        data.selectedAmenities || [],
+        totalAmount
       );
 
-      // Store payment
       paymentService.savePayment({
         id: Date.now().toString(),
         userId: user.id,
         slotId: data.slotId,
-        amount: data.price,
+        amount: totalAmount,
         status: "success",
         transactionId: fakeTransactionId,
         date: new Date().toISOString(),
       });
 
-      // Fake email simulation
       console.log(`
 📧 EMAIL SENT TO: ${user.email}
 Subject: UniSport Booking Confirmation
@@ -63,7 +72,7 @@ Hi ${user.name},
 Your booking is confirmed 🎉
 
 Transaction ID: ${fakeTransactionId}
-Amount Paid: ₹${data.price}
+Amount Paid: ₹${totalAmount}
 Date: ${data.date}
 
 Thank you for choosing UniSport.
@@ -81,21 +90,46 @@ Thank you for choosing UniSport.
   return (
     <div className="min-h-screen flex items-center justify-center bg-neutral-50 px-4">
       <div className="bg-white w-full max-w-md rounded-xl shadow-xl border border-neutral-200 p-8 space-y-6">
-
         <h2 className="text-2xl font-black uppercase tracking-tight text-neutral-900">
           Complete Payment
         </h2>
 
-        <div className="bg-neutral-100 rounded-lg p-4 space-y-2 text-sm">
-          <div className="flex justify-between">
+        <div className="bg-neutral-100 rounded-lg p-5 space-y-4 text-sm">
+          <div className="flex justify-between items-center">
             <span className="font-bold text-neutral-500 uppercase">Date</span>
-            <span>{data.date}</span>
+            <span className="text-neutral-900">{data.date}</span>
           </div>
 
-          <div className="flex justify-between">
-            <span className="font-bold text-neutral-500 uppercase">Amount</span>
-            <span className="font-black text-lg text-neutral-900">
-              ₹{data.price}
+          <div className="border-t border-neutral-200 pt-4">
+            <div className="flex justify-between items-center">
+              <span className="font-bold text-neutral-500 uppercase">Slot Price</span>
+              <span className="text-neutral-900 font-semibold">₹{slotPrice}</span>
+            </div>
+          </div>
+
+          {data.selectedAmenities && data.selectedAmenities.length > 0 && (
+            <div className="border-t border-neutral-200 pt-4">
+              <p className="font-bold text-neutral-500 uppercase mb-3">Amenities</p>
+
+              <div className="space-y-2">
+                {data.selectedAmenities.map(item => (
+                  <div key={item.amenityId} className="flex justify-between items-center">
+                    <span className="text-neutral-900">
+                      {item.name} × {item.quantity}
+                    </span>
+                    <span className="text-neutral-900 font-semibold">
+                      ₹{item.price * item.quantity}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="border-t border-neutral-300 pt-4 flex justify-between items-center">
+            <span className="font-bold text-neutral-500 uppercase">Total</span>
+            <span className="font-black text-2xl text-neutral-900">
+              ₹{totalAmount}
             </span>
           </div>
         </div>
@@ -109,7 +143,7 @@ Thank you for choosing UniSport.
               : "bg-black text-white hover:bg-orange-600"
           }`}
         >
-          {loading ? "Processing..." : "Pay Now"}
+          {loading ? "Processing..." : `Pay ₹${totalAmount}`}
         </button>
 
         <button
