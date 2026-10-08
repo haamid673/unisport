@@ -673,6 +673,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onStartPayment }) =
   const [myBookings, setMyBookings] = useState<Booking[]>([]);
   const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
 
   const cities = ['Chennai', 'Mumbai', 'Delhi', 'Kolkata', 'Jaipur', 'Bangalore', 'Hyderabad', 'Trivandrum'];
 
@@ -1045,7 +1046,9 @@ const amenitiesTotal = selectedAmenities.reduce(
       onClick={() => {
         setSelectedFacility(null);
         setSelectedSlotInsight(null);
-      }}
+        setSelectedSlot(null);
+        setSelectedAmenities([]);
+  }}
     ></div>
 
     <div className="relative bg-white w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col md:flex-row shadow-2xl animate-in zoom-in-95 duration-200 rounded-xl">
@@ -1124,7 +1127,7 @@ const amenitiesTotal = selectedAmenities.reduce(
                     : 'Normal demand for this slot.'}
                 </p>
 
-                {selectedSlotInsight.isSurge ? (
+                {selectedSlot?.surgeEnabled || selectedSlotInsight?.isSurge ? (
                   <span className="text-[10px] bg-orange-100 text-orange-700 border border-orange-200 px-2 py-1 rounded font-black uppercase tracking-wider">
                     Surge Rates
                   </span>
@@ -1133,6 +1136,8 @@ const amenitiesTotal = selectedAmenities.reduce(
                     Normal Rates
                   </span>
                 )}
+
+
               </div>
             ) : (
               <p className="text-xs text-neutral-400 italic">
@@ -1156,7 +1161,10 @@ const amenitiesTotal = selectedAmenities.reduce(
                       return (
                         <div
                           key={s.id}
-                          onClick={() => setSelectedSlotInsight(pred || null)}
+                          onClick={() => {
+                            setSelectedSlotInsight(pred || null);
+                            setSelectedSlot(s);
+                          }}
                           className={`group cursor-pointer p-4 rounded-lg border-2 transition-all flex items-center justify-between ${
                             selectedSlotInsight?.slotId === s.id
                               ? 'border-orange-500 bg-orange-50'

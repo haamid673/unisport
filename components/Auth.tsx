@@ -223,45 +223,50 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     resetRegisterVerification();
   };
 
-  const handleSendOtp = () => {
-    setError('');
-    setInfo('');
-    setOtpVerified(false);
+const handleSendOtp = () => {
+  setError('');
+  setInfo('');
+  setOtpVerified(false);
 
-    if (!name.trim()) {
-      setError('Please enter your full name first.');
-      return;
-    }
+  if (!name.trim()) {
+    setError('Please enter your full name first.');
+    return;
+  }
 
-    if (!phone.trim()) {
-      setError('Please enter your phone number first.');
-      return;
-    }
+  if (!phone.trim()) {
+    setError('Please enter your phone number first.');
+    return;
+  }
 
-    if (!isValidPhoneNumber(phone)) {
-      setError('Please enter a valid phone number.');
-      return;
-    }
+  if (!isValidPhoneNumber(phone)) {
+    setError('Please enter a valid phone number.');
+    return;
+  }
 
-    if (!email.trim()) {
-      setError('Please enter your email address first.');
-      return;
-    }
+  if (!email.trim()) {
+    setError('Please enter your email address first.');
+    return;
+  }
 
-    const identifier = otpChannel === 'email' ? email.trim() : phone.trim();
+  if (!isValidEmail(email)) {
+    setError('Please enter a valid email address.');
+    return;
+  }
 
-    setSendingOtp(true);
+  const identifier = otpChannel === 'email' ? email.trim() : phone.trim();
 
-    setTimeout(() => {
-      const generatedOtp = authOtpService.sendOtp(identifier, otpChannel);
-      setOtpSent(true);
-      setDemoOtpMessage(
-        `Demo ${otpChannel.toUpperCase()} OTP sent to ${identifier}: ${generatedOtp}`
-      );
-      setInfo(`OTP sent via ${otpChannel}.`);
-      setSendingOtp(false);
-    }, 500);
-  };
+  setSendingOtp(true);
+
+  setTimeout(() => {
+    const generatedOtp = authOtpService.sendOtp(identifier, otpChannel);
+    setOtpSent(true);
+    setDemoOtpMessage(
+      `Demo ${otpChannel.toUpperCase()} OTP sent to ${identifier}: ${generatedOtp}`
+    );
+    setInfo(`OTP sent via ${otpChannel}.`);
+    setSendingOtp(false);
+  }, 500);
+};
 
   const handleVerifyOtp = () => {
     setError('');
@@ -288,41 +293,49 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setInfo('');
+const handleSubmit = (e: React.FormEvent) => {
+  e.preventDefault();
+  setError('');
+  setInfo('');
 
-    try {
-      if (isLogin) {
-        const user = userService.login(email, password);
-        onLogin(user);
-        return;
+  try {
+    if (isLogin) {
+      if (!isValidEmail(email)) {
+        throw new Error('Please enter a valid email address.');
       }
 
-      if (!otpSent) {
-        throw new Error('Please send OTP before creating account.');
-      }
-
-      if (!otpVerified) {
-        throw new Error('Please verify OTP before creating account.');
-      }
-
-      if (!isValidPhoneNumber(phone)) {
-        throw new Error('Please enter a valid phone number.');
-      }
-
-      if (password !== confirmPassword) {
-        throw new Error('Passwords do not match.');
-      }
-
-      const user = userService.register(email, password, name, phone);
-      resetRegisterVerification();
+      const user = userService.login(email, password);
       onLogin(user);
-    } catch (err: any) {
-      setError(err.message);
+      return;
     }
-  };
+
+    if (!isValidEmail(email)) {
+      throw new Error('Please enter a valid email address.');
+    }
+
+    if (!otpSent) {
+      throw new Error('Please send OTP before creating account.');
+    }
+
+    if (!otpVerified) {
+      throw new Error('Please verify OTP before creating account.');
+    }
+
+    if (!isValidPhoneNumber(phone)) {
+      throw new Error('Please enter a valid phone number.');
+    }
+
+    if (password !== confirmPassword) {
+      throw new Error('Passwords do not match.');
+    }
+
+    const user = userService.register(email.trim(), password, name.trim(), phone.trim());
+    resetRegisterVerification();
+    onLogin(user);
+  } catch (err: any) {
+    setError(err.message);
+  }
+};
 
   const handleGoogleLogin = () => {
     alert('Google Login Simulation: Redirecting to OAuth provider...');
@@ -336,6 +349,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       }
     }, 1000);
   };
+
+  const isValidEmail = (value: string) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+};
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-neutral-50 p-6 font-sans">
