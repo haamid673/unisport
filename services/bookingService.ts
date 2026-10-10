@@ -2,6 +2,20 @@ import { Booking, SelectedAmenity } from "../types";
 import { storageService, STORAGE_KEYS } from "./storageService";
 import { facilityService } from "./facilityService";
 
+/**
+ * Whether the customer UI may start the mock (localStorage) checkout.
+ *
+ * It is OFF because facilities and slots now come from Supabase with
+ * UUID identifiers. This checkout looks slots up in the mock catalog and
+ * confirms bookings immediately after a simulated payment, so running it
+ * against real slots would either fail or record a misleading
+ * "confirmed" booking that does not exist in the database.
+ *
+ * Turn it back on only when booking creation goes through the
+ * create_booking() RPC and a real payment flow.
+ */
+export const CUSTOMER_CHECKOUT_ENABLED = false;
+
 export function getAllBookings(): Booking[] {
   return storageService.get<Booking[]>(STORAGE_KEYS.BOOKINGS, []);
 }
