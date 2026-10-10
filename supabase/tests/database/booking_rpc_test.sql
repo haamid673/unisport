@@ -106,7 +106,8 @@ values (
 -- ============================================================
 -- Operating hours
 --
--- 2026-10-12 is Monday = 1
+-- The booking date used throughout is (current_date + 1).
+-- Operating hours are created for that date's weekday.
 -- ============================================================
 
 insert into public.facility_operating_hours (
@@ -118,7 +119,7 @@ insert into public.facility_operating_hours (
 )
 values (
   '33333333-3333-3333-3333-333333333333',
-  1,
+  extract(dow from current_date + 1)::integer,
   '08:00',
   '22:00',
   false
@@ -148,7 +149,7 @@ select lives_ok(
     from public.create_booking(
       '33333333-3333-3333-3333-333333333333',
       '44444444-4444-4444-4444-444444444444',
-      '2026-10-12'
+      (current_date + 1)
     )
   $$,
   'valid booking should succeed'
@@ -166,7 +167,7 @@ select is(
     from public.bookings
     where user_id = '11111111-1111-1111-1111-111111111111'
       and facility_id = '33333333-3333-3333-3333-333333333333'
-      and booking_date = '2026-10-12'
+      and booking_date = (current_date + 1)
   ),
   500::numeric,
   'booking amount should equal server-side slot price'
@@ -183,7 +184,7 @@ select is(
     select status::text
     from public.bookings
     where user_id = '11111111-1111-1111-1111-111111111111'
-      and booking_date = '2026-10-12'
+      and booking_date = (current_date + 1)
   ),
   'pending_payment',
   'new booking should start in pending_payment state'
@@ -200,7 +201,7 @@ select ok(
     select 1
     from public.bookings
     where user_id = '11111111-1111-1111-1111-111111111111'
-      and booking_date = '2026-10-12'
+      and booking_date = (current_date + 1)
       and expires_at between
         now() + interval '9 minutes'
         and now() + interval '11 minutes'
@@ -220,7 +221,7 @@ select throws_ok(
     from public.create_booking(
       '33333333-3333-3333-3333-333333333333',
       '44444444-4444-4444-4444-444444444444',
-      '2026-10-12'
+      (current_date + 1)
     )
   $$,
   '23P01',
@@ -260,14 +261,13 @@ select throws_ok(
     from public.create_booking(
       '33333333-3333-3333-3333-333333333333',
       '55555555-5555-5555-5555-555555555555',
-      '2026-10-12'
+      (current_date + 1)
     )
   $$,
   'P0002',
   NULL,
   'unknown slot should be rejected'
 );
-
 
 select * from finish();
 
