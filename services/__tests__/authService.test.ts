@@ -300,6 +300,33 @@ describe('updateOwnProfile', () => {
     expect(f.updates).toEqual([{ full_name: 'New Name', phone: '9000000000' }]);
   });
 
+  it('sends only the fields that were supplied, never a whole profile row', async () => {
+    const f = fakeClient({ session: { user: authUser() } });
+    const service = createAuthService(() => f.client);
+
+    await service.updateOwnProfile({ name: 'Only Name' });
+    await service.updateOwnProfile({ phone: '9111111111' });
+    // A caller spreading a full profile row (protected columns included)
+    // must not get those columns into the patch.
+    await service.updateOwnProfile({
+      ...(PROFILE as object),
+      name: 'Spread',
+      phone: '9222222222'
+    } as any);
+
+    expect(f.updates).toEqual([
+      { full_name: 'Only Name' },
+      { phone: '9111111111' },
+      { full_name: 'Spread', phone: '9222222222' }
+    ]);
+
+    for (const patch of f.updates) {
+      for (const key of ['id', 'role', 'created_at', 'updated_at']) {
+        expect(patch).not.toHaveProperty(key);
+      }
+    }
+  });
+
   it('requires a signed-in session', async () => {
     const f = fakeClient({ session: null });
     await expect(
