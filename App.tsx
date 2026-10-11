@@ -96,6 +96,9 @@
 import React, { useState, useEffect } from 'react';
 import { User, CommunityGroup } from './types';
 import { userService } from './services/userService';
+import { authService } from './services/authService';
+import { supabaseConfigError } from './services/supabaseClient';
+import { storageService, STORAGE_KEYS } from './services/storageService';
 import Navbar from './components/Navbar';
 import Auth from './components/Auth';
 import UserDashboard from './components/UserDashboard';
@@ -109,6 +112,9 @@ import PaymentPage from './components/PaymentPage';
 
 seedDemoData();
 
+// A session stored by the old simulated login must never be honoured.
+storageService.remove(STORAGE_KEYS.CURRENT_USER);
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -116,11 +122,35 @@ const App: React.FC = () => {
   const [isReady, setIsReady] = useState(false);
   const [paymentData, setPaymentData] = useState<any | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
+  // Real session handling. supabase-js reports the restored session
+  // (or its absence) first, then every sign-in / sign-out / user
+  // change. The identity and role come from Supabase Auth and the
+  // database profile, never from localStorage.
   useEffect(() => {
-    const savedUser = userService.getCurrentUser();
-    if (savedUser) setUser(savedUser);
-    setIsReady(true);
+    if (supabaseConfigError) {
+      setIsReady(true);
+      return;
+    }
+
+    return authService.subscribe(
+      (authenticated) => {
+        const resolved = userService.setCurrentUser(authenticated);
+
+        setUser((previous) => {
+          if (!previous && resolved) setActiveTab('dashboard');
+          return resolved;
+        });
+
+        if (resolved) setAuthError(null);
+        setIsReady(true);
+      },
+      (message) => {
+        setAuthError(message);
+        setIsReady(true);
+      }
+    );
   }, []);
 
   useEffect(() => {
@@ -129,14 +159,13 @@ const App: React.FC = () => {
   return () => clearTimeout(timer);
 }, [toast]);
 
-  const handleLogin = (u: User) => {
-    setUser(u);
-    setActiveTab('dashboard');
-  };
-
-  const handleLogout = () => {
-    userService.logout();
-    setUser(null);
+  const handleLogout = async () => {
+    try {
+      await authService.signOut();
+      // The auth listener clears the user.
+    } catch {
+      setToast('Could not sign out. Please try again.');
+    }
   };
 
   const handleProfileUpdate = (updatedUser: User) => {
@@ -151,7 +180,23 @@ const App: React.FC = () => {
     );
   }
 
-  if (!user) return <Auth onLogin={handleLogin} />;
+  if (supabaseConfigError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-neutral-50 p-6 font-sans">
+        <div className="max-w-lg w-full bg-white rounded-lg border-2 border-red-200 p-8 shadow-xl">
+          <h1 className="text-xl font-black uppercase tracking-tighter text-neutral-900 mb-3">
+            Configuration required
+          </h1>
+          <p className="text-sm text-neutral-700 mb-4">{supabaseConfigError}</p>
+          <p className="text-xs text-neutral-400 font-bold uppercase tracking-widest">
+            Authentication is disabled until Supabase is configured.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return <Auth notice={authError} />;
 
   const renderDashboard = () => {
   switch (user.role) {

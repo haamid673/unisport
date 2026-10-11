@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, production-rebuild]
+
+# Least privilege: the jobs only read the repository.
+permissions:
+  contents: read
+
+# A newer run for the same branch/PR supersedes an older one.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (test + build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # Reproducible install: fails if package-lock.json and package.json disagree.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # Deliberately no `tsc --noEmit` step: the codebase has 51 known,
+      # pre-existing type errors (all in code outside the recent work).
+      # A permanently red check would hide real regressions, and a
+      # suppressed one would be misleading. Add it once the baseline is
+      # fixed.
+
+  database:
+    name: Database (migrations + pgTAP)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
+        with:
+          version: 2.120.0
+
+      # Starts a disposable Postgres in Docker on the runner and applies
+      # every migration in supabase/migrations to that fresh database.
+      # Only the database is needed for the pgTAP suites, so the API,
+      # auth, storage, studio and other services are excluded.
+      # No project is linked, no credentials or secrets are used, and
+      # nothing outside the runner can be reached or modified.
+      - name: Start local database and apply migrations
+        run: >
+          supabase start -x
+          gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      # Runs every file in supabase/tests/database, including the
+      # multi-session concurrency suite. That suite refuses to run (and
+      # then FAILS, it never skips) unless the database positively
+      # identifies as the local Supabase stack, which it does here.
+      - name: Run database tests
+        run: supabase test db
+
+      - name: Show database logs on failure
+        if: failure()
+        run: docker logs supabase_db_unisport-ui --tail 200

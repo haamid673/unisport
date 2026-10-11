@@ -633,11 +633,16 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { facilityService } from '../services/facilityService';
+import {
+  facilityRepository,
+  FacilityLoadError,
+  AvailabilityLoadError
+} from '../services/facilityRepository';
+import { getSlotAction, AvailabilityView } from '../services/slotAvailability';
 import {
   createBookingTransactional,
-  checkSlotAvailability,
-  getBookingsByUser
+  getBookingsByUser,
+  CUSTOMER_CHECKOUT_ENABLED
 } from "../services/bookingService";
 import { aiEngine } from '../services/aiEngine';
 import { userService } from '../services/userService';
@@ -673,6 +678,38 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onStartPayment }) =
   const [myBookings, setMyBookings] = useState<Booking[]>([]);
   const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
+
+  // Facility/slot catalog loaded from Supabase (no mock fallback).
+  const [catalogStatus, setCatalogStatus] =
+    useState<'loading' | 'ready' | 'error'>('loading');
+  const [catalogError, setCatalogError] = useState<string>('');
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // Slot availability for the open facility and selected date, decided
+  // by the database (get_slot_availability). A snapshot, not a
+  // reservation. Never derived from mock bookings, never defaulted to
+  // "available" when it cannot be read.
+  //
+  // The stored answer carries the facility/date/retry it was read for.
+  // Any other combination is treated as "loading", so for the moment
+  // between a date change and the next read the previous date's
+  // statuses are never shown (or acted on) for the new one.
+  const [availabilityReloadKey, setAvailabilityReloadKey] = useState(0);
+  const [availabilityState, setAvailabilityState] = useState<{
+    key: string;
+    view: AvailabilityView;
+  }>({ key: '', view: { phase: 'idle' } });
+
+  const availabilityKey = selectedFacility
+    ? `${selectedFacility.id}|${selectedDate}|${availabilityReloadKey}`
+    : '';
+
+  const availability: AvailabilityView = !selectedFacility
+    ? { phase: 'idle' }
+    : availabilityState.key === availabilityKey
+    ? availabilityState.view
+    : { phase: 'loading' };
 
   const cities = ['Chennai', 'Mumbai', 'Delhi', 'Kolkata', 'Jaipur', 'Bangalore', 'Hyderabad', 'Trivandrum'];
 
@@ -718,14 +755,78 @@ const calculateDistanceKm = (
 };
 
 
+ // Real facilities and slots. A failure is shown with a Retry action;
+ // it is never replaced with mock data.
  useEffect(() => {
-  const facilitiesData = facilityService.getAllFacilities();
-  const slotsData = facilityService.getAllSlots();
+  let cancelled = false;
+
+  setCatalogStatus('loading');
+  setCatalogError('');
+
+  facilityRepository
+    .loadCustomerCatalog()
+    .then(catalog => {
+      if (cancelled) return;
+      setFacilities(catalog.facilities);
+      setAllSlots(catalog.slots);
+      setCatalogStatus('ready');
+    })
+    .catch(err => {
+      if (cancelled) return;
+      setFacilities([]);
+      setAllSlots([]);
+      setCatalogError(
+        err instanceof FacilityLoadError
+          ? err.message
+          : 'Could not load facilities. Please try again.'
+      );
+      setCatalogStatus('error');
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [user.id, reloadKey]);
+
+ // Availability of the open facility's slots on the selected date.
+ // Re-read whenever the facility or the date changes, and on Retry.
+ useEffect(() => {
+  if (!selectedFacility) return;
+
+  let cancelled = false;
+  const key = availabilityKey;
+
+  facilityRepository
+    .loadSlotAvailability(selectedFacility.id, selectedDate)
+    .then(byId => {
+      if (cancelled) return;
+      setAvailabilityState({ key, view: { phase: 'ready', byId } });
+    })
+    .catch(err => {
+      if (cancelled) return;
+      setAvailabilityState({
+        key,
+        view: {
+          phase: 'error',
+          message:
+            err instanceof AvailabilityLoadError
+              ? err.message
+              : 'Could not check slot availability. Please try again.'
+        }
+      });
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [user.id, selectedFacility?.id, selectedDate, availabilityReloadKey]);
+
+ useEffect(() => {
+  const facilitiesData = facilities;
+  const slotsData = allSlots;
   const userBookings = getBookingsByUser(user.id)
     .filter(b => b.status === 'confirmed');
 
-  setFacilities(facilitiesData);
-  setAllSlots(slotsData);
   setMyBookings(userBookings);
 
   // -------- Deterministic Recommendation Engine --------
@@ -773,12 +874,12 @@ const calculateDistanceKm = (
     }))
   );
 
-}, [user.id, selectedCity]);
+}, [user.id, selectedCity, facilities, allSlots]);
 
   const handleSelectFacility = async (facility: Facility) => {
   setSelectedFacility(facility);
 
-  const facilitySlots = facilityService.getSlotsByFacility(facility.id);
+  const facilitySlots = allSlots.filter(s => s.facilityId === facility.id);
   setSlots(facilitySlots);
 
   setLoadingPrediction(true);
@@ -817,6 +918,11 @@ const calculateDistanceKm = (
 const navigate = useNavigate();
 
 const handleBook = (slot: Slot) => {
+  // Checkout is gated: the mock checkout cannot create bookings for
+  // real (UUID) slots, and it must not pretend to.
+  if (!CUSTOMER_CHECKOUT_ENABLED) return;
+  if (slot.isActive === false) return;
+  if (!getSlotAction(slot, availability, CUSTOMER_CHECKOUT_ENABLED).bookable) return;
   if (!onStartPayment) return;
 
   const selected = new Date(selectedDate);
@@ -854,7 +960,13 @@ const handleBook = (slot: Slot) => {
   };
 
   // Upcoming Booking Widget Logic
-  const upcomingBooking = myBookings
+  // Legacy mock bookings reference mock slot ids that do not exist in the
+  // real catalog; they remain visible on the Profile page only.
+  const scheduleBookings = myBookings.filter(
+    b => b.status === 'confirmed' && allSlots.some(s => s.id === b.slotId)
+  );
+
+  const upcomingBooking = scheduleBookings
     .filter(b => new Date(b.bookingDate) >= new Date() && b.status === 'confirmed')
     .sort((a, b) => new Date(a.bookingDate).getTime() - new Date(b.bookingDate).getTime())[0];
 
@@ -960,13 +1072,9 @@ const amenitiesTotal = selectedAmenities.reduce(
 
       {/* Upcoming Booking Widget */}
       {upcomingBooking && (() => {
-  const slot = facilityService
-    .getAllSlots()
-    .find(s => s.id === upcomingBooking.slotId);
+  const slot = allSlots.find(s => s.id === upcomingBooking.slotId);
 
-  const facility = facilityService
-    .getAllFacilities()
-    .find(f => f.id === slot?.facilityId);
+  const facility = facilities.find(f => f.id === slot?.facilityId);
 
   return (
     <div className="mb-12 bg-neutral-900 text-white rounded-xl p-8 flex flex-col md:flex-row justify-between items-start md:items-center relative overflow-hidden group gap-6">
@@ -1045,7 +1153,9 @@ const amenitiesTotal = selectedAmenities.reduce(
       onClick={() => {
         setSelectedFacility(null);
         setSelectedSlotInsight(null);
-      }}
+        setSelectedSlot(null);
+        setSelectedAmenities([]);
+  }}
     ></div>
 
     <div className="relative bg-white w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col md:flex-row shadow-2xl animate-in zoom-in-95 duration-200 rounded-xl">
@@ -1124,7 +1234,7 @@ const amenitiesTotal = selectedAmenities.reduce(
                     : 'Normal demand for this slot.'}
                 </p>
 
-                {selectedSlotInsight.isSurge ? (
+                {selectedSlot?.surgeEnabled || selectedSlotInsight?.isSurge ? (
                   <span className="text-[10px] bg-orange-100 text-orange-700 border border-orange-200 px-2 py-1 rounded font-black uppercase tracking-wider">
                     Surge Rates
                   </span>
@@ -1133,6 +1243,8 @@ const amenitiesTotal = selectedAmenities.reduce(
                     Normal Rates
                   </span>
                 )}
+
+
               </div>
             ) : (
               <p className="text-xs text-neutral-400 italic">
@@ -1145,18 +1257,45 @@ const amenitiesTotal = selectedAmenities.reduce(
               {/* Slots List */}
               {/* Slots List + Amenities */}
               <div className="flex-1 overflow-y-auto p-8 pt-4 min-h-0">
+                {!CUSTOMER_CHECKOUT_ENABLED && (
+                  <div className="mb-4 p-3 bg-neutral-50 border border-neutral-200 text-[10px] font-bold uppercase tracking-wide text-neutral-500">
+                    Online booking is being connected to the new backend. The
+                    slots shown are live, but they cannot be reserved yet.
+                  </div>
+                )}
+                {availability.phase === 'error' && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 flex items-center justify-between gap-4">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-red-700">
+                      {availability.message}
+                    </p>
+                    <button
+                      onClick={() => setAvailabilityReloadKey(k => k + 1)}
+                      className="px-4 py-2 bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-md hover:bg-orange-600 transition-all"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
                 <div className="space-y-3">
                   {slots.length > 0 ? (
                     slots.map(s => {
                       const pred = getSlotPrediction(s.id);
                       const isHigh = pred?.demandLevel === 'High';
-                      const isAvailable = checkSlotAvailability(s.id, selectedDate);
-                      const booked = !isAvailable;
+                      const action = getSlotAction(
+                        s,
+                        availability,
+                        CUSTOMER_CHECKOUT_ENABLED
+                      );
+                      const booked = action.muted;
+                      const canBook = action.bookable;
 
                       return (
                         <div
                           key={s.id}
-                          onClick={() => setSelectedSlotInsight(pred || null)}
+                          onClick={() => {
+                            setSelectedSlotInsight(pred || null);
+                            setSelectedSlot(s);
+                          }}
                           className={`group cursor-pointer p-4 rounded-lg border-2 transition-all flex items-center justify-between ${
                             selectedSlotInsight?.slotId === s.id
                               ? 'border-orange-500 bg-orange-50'
@@ -1205,14 +1344,14 @@ const amenitiesTotal = selectedAmenities.reduce(
                                 e.stopPropagation();
                                 handleBook(s);
                               }}
-                              disabled={!isAvailable}
+                              disabled={!canBook}
                               className={`px-6 py-2 rounded-md text-xs font-black uppercase tracking-widest transition-all ${
-                                isAvailable
+                                canBook
                                   ? 'bg-black text-white group-hover:bg-orange-600'
                                   : 'bg-neutral-300 text-neutral-500 cursor-not-allowed'
                               }`}
                             >
-                              {isAvailable ? 'Book' : 'Full'}
+                              {action.label}
                             </button>
                           </div>
                         </div>
@@ -1388,8 +1527,42 @@ const amenitiesTotal = selectedAmenities.reduce(
             ))}
           </div>
 
+          {catalogStatus === 'loading' && (
+            <div className="text-center py-16 border-2 border-dashed border-neutral-200 rounded-xl">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-neutral-900 mx-auto mb-4"></div>
+              <p className="text-neutral-400 font-bold uppercase text-xs tracking-widest">
+                Loading facilities...
+              </p>
+            </div>
+          )}
+
+          {catalogStatus === 'error' && (
+            <div className="text-center py-12 px-6 border-2 border-dashed border-red-200 bg-red-50 rounded-xl">
+              <p className="text-red-600 font-bold uppercase text-xs tracking-widest mb-4">
+                <i className="fas fa-exclamation-circle mr-2"></i>
+                {catalogError}
+              </p>
+              <button
+                onClick={() => setReloadKey(k => k + 1)}
+                className="px-6 py-2 rounded-md text-xs font-black uppercase tracking-widest bg-black text-white hover:bg-orange-600 transition-all"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {catalogStatus === 'ready' && filteredFacilities.length === 0 && (
+            <div className="text-center py-16 border-2 border-dashed border-neutral-200 rounded-xl">
+              <p className="text-neutral-400 font-bold uppercase text-xs tracking-widest">
+                {facilities.length === 0
+                  ? 'No facilities are available yet'
+                  : `No facilities found in ${selectedCity}`}
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {filteredFacilities.map((f) => (
+            {catalogStatus === 'ready' && filteredFacilities.map((f) => (
               <div 
                 key={f.id} 
                 onClick={() => handleSelectFacility(f)}
@@ -1446,9 +1619,8 @@ const amenitiesTotal = selectedAmenities.reduce(
             <h4 className="font-black uppercase text-lg mb-6">Your Schedule</h4>
 
             <div className="space-y-4">
-              {myBookings.filter(b => b.status === 'confirmed').length > 0 ? (
-                myBookings
-                  .filter(b => b.status === 'confirmed')
+              {scheduleBookings.length > 0 ? (
+                scheduleBookings
                   .map(b => {
                     const slot = allSlots.find(s => s.id === b.slotId);
                     const facility = facilities.find(f => f.id === slot?.facilityId);

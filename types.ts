@@ -36,11 +36,24 @@ export interface Facility {
   longitude?: number;
 }
 
+/**
+ * Result of the database's get_slot_availability() for one slot on one
+ * date. A snapshot, not a reservation.
+ */
+export type SlotAvailabilityStatus =
+  | 'available'
+  | 'booked'
+  | 'offer_held'
+  | 'inactive'
+  | 'closed';
+
 export interface Slot {
   id: string;
   facilityId: string;
   time: string;
   price: number;
+  /** Database is_active flag. Absent on legacy mock slots (treated as active). */
+  isActive?: boolean;
 
   surgeEnabled?: boolean;
   surgeMultiplier?: number;

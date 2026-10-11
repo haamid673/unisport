@@ -175,15 +175,18 @@
 // export default Auth;
 
 import React, { useState } from 'react';
-import { userService } from '../services/userService';
-import { authOtpService } from '../services/authOtpService';
-import { User } from '../types';
+import { authService } from '../services/authService';
 
 interface AuthProps {
-  onLogin: (user: User) => void;
+  /**
+   * Message from the session layer (for example "could not load your
+   * profile"). Sign-in/sign-up success is not reported here: App.tsx
+   * observes the Supabase session and swaps this screen out.
+   */
+  notice?: string | null;
 }
 
-const Auth: React.FC<AuthProps> = ({ onLogin }) => {
+const Auth: React.FC<AuthProps> = ({ notice }) => {
   const [isLogin, setIsLogin] = useState(true);
 
   const [email, setEmail] = useState('');
@@ -192,150 +195,85 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
 
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpVerified, setOtpVerified] = useState(false);
-  const [otpChannel, setOtpChannel] = useState<'email' | 'phone'>('email');
-
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
-  const [demoOtpMessage, setDemoOtpMessage] = useState('');
-  const [sendingOtp, setSendingOtp] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const isValidPhoneNumber = (value: string) => {
     const cleaned = value.replace(/\D/g, '');
     return cleaned.length >= 10 && cleaned.length <= 12;
   };
 
-  const resetRegisterVerification = () => {
-    setOtp('');
-    setOtpSent(false);
-    setOtpVerified(false);
-    setDemoOtpMessage('');
-    setInfo('');
-    setConfirmPassword('');
-    authOtpService.clearOtp();
-  };
-
   const switchMode = (loginMode: boolean) => {
     setIsLogin(loginMode);
     setError('');
-    resetRegisterVerification();
-  };
-
-  const handleSendOtp = () => {
-    setError('');
     setInfo('');
-    setOtpVerified(false);
-
-    if (!name.trim()) {
-      setError('Please enter your full name first.');
-      return;
-    }
-
-    if (!phone.trim()) {
-      setError('Please enter your phone number first.');
-      return;
-    }
-
-    if (!isValidPhoneNumber(phone)) {
-      setError('Please enter a valid phone number.');
-      return;
-    }
-
-    if (!email.trim()) {
-      setError('Please enter your email address first.');
-      return;
-    }
-
-    const identifier = otpChannel === 'email' ? email.trim() : phone.trim();
-
-    setSendingOtp(true);
-
-    setTimeout(() => {
-      const generatedOtp = authOtpService.sendOtp(identifier, otpChannel);
-      setOtpSent(true);
-      setDemoOtpMessage(
-        `Demo ${otpChannel.toUpperCase()} OTP sent to ${identifier}: ${generatedOtp}`
-      );
-      setInfo(`OTP sent via ${otpChannel}.`);
-      setSendingOtp(false);
-    }, 500);
+    setConfirmPassword('');
   };
 
-  const handleVerifyOtp = () => {
-    setError('');
-    setInfo('');
-
-    try {
-      if (!otpSent) {
-        throw new Error('Please send OTP first.');
-      }
-
-      if (!otp.trim()) {
-        throw new Error('Please enter the OTP.');
-      }
-
-      const identifier = otpChannel === 'email' ? email.trim() : phone.trim();
-
-      authOtpService.verifyOtp(identifier, otpChannel, otp.trim());
-
-      setOtpVerified(true);
-      setInfo('OTP verified successfully.');
-    } catch (err: any) {
-      setOtpVerified(false);
-      setError(err.message);
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+
     setError('');
     setInfo('');
 
-    try {
-      if (isLogin) {
-        const user = userService.login(email, password);
-        onLogin(user);
+    if (!isValidEmail(email)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    if (!isLogin) {
+      if (!name.trim()) {
+        setError('Please enter your full name.');
         return;
       }
 
-      if (!otpSent) {
-        throw new Error('Please send OTP before creating account.');
-      }
-
-      if (!otpVerified) {
-        throw new Error('Please verify OTP before creating account.');
-      }
-
       if (!isValidPhoneNumber(phone)) {
-        throw new Error('Please enter a valid phone number.');
+        setError('Please enter a valid phone number.');
+        return;
       }
 
       if (password !== confirmPassword) {
-        throw new Error('Passwords do not match.');
+        setError('Passwords do not match.');
+        return;
+      }
+    }
+
+    setSubmitting(true);
+
+    try {
+      if (isLogin) {
+        // On success App.tsx receives the session through the Supabase
+        // auth listener and replaces this screen.
+        await authService.signIn(email, password);
+        return;
       }
 
-      const user = userService.register(email, password, name, phone);
-      resetRegisterVerification();
-      onLogin(user);
+      const { needsEmailConfirmation } = await authService.signUp({
+        email,
+        password,
+        name,
+        phone
+      });
+
+      if (needsEmailConfirmation) {
+        setInfo('Account created. Check your email and follow the link to confirm it, then sign in.');
+        setIsLogin(true);
+        setPassword('');
+        setConfirmPassword('');
+      }
+      // Otherwise a session was issued and App.tsx takes over.
     } catch (err: any) {
-      setError(err.message);
+      setError(err?.message || 'Authentication failed. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleGoogleLogin = () => {
-    alert('Google Login Simulation: Redirecting to OAuth provider...');
-
-    setTimeout(() => {
-      try {
-        const user = userService.login('player@demo.com', 'player123');
-        onLogin(user);
-      } catch {
-        alert('Google Login Simulation: User not found in demo data.');
-      }
-    }, 1000);
-  };
+  const isValidEmail = (value: string) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+};
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-neutral-50 p-6 font-sans">
@@ -375,10 +313,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           </button>
         </div>
 
-        {error && (
+        {(error || notice) && (
           <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs font-bold uppercase tracking-wide border border-red-200 flex items-center gap-2">
             <i className="fas fa-exclamation-circle"></i>
-            {error}
+            {error || notice}
           </div>
         )}
 
@@ -386,12 +324,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           <div className="mb-4 p-3 bg-emerald-50 text-emerald-700 text-xs font-bold uppercase tracking-wide border border-emerald-200 flex items-center gap-2">
             <i className="fas fa-circle-check"></i>
             {info}
-          </div>
-        )}
-
-        {!isLogin && demoOtpMessage && (
-          <div className="mb-4 p-3 bg-orange-50 text-orange-700 text-xs font-bold border border-orange-200">
-            {demoOtpMessage}
           </div>
         )}
 
@@ -472,126 +404,18 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </div>
           )}
 
-          {!isLogin && (
-            <>
-              <div className="pt-2">
-                <label className="block text-xs font-black text-neutral-400 uppercase tracking-widest mb-2">
-                  Verification Channel
-                </label>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOtpChannel('email');
-                      resetRegisterVerification();
-                    }}
-                    className={`py-3 rounded-lg text-xs font-black uppercase tracking-widest border-2 transition-colors ${
-                      otpChannel === 'email'
-                        ? 'bg-neutral-900 text-white border-neutral-900'
-                        : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
-                    }`}
-                  >
-                    Email OTP
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOtpChannel('phone');
-                      resetRegisterVerification();
-                    }}
-                    className={`py-3 rounded-lg text-xs font-black uppercase tracking-widest border-2 transition-colors ${
-                      otpChannel === 'phone'
-                        ? 'bg-neutral-900 text-white border-neutral-900'
-                        : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
-                    }`}
-                  >
-                    SMS OTP
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
-                <div>
-                  <label className="block text-xs font-black text-neutral-400 uppercase tracking-widest mb-1">
-                    Enter OTP
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={6}
-                    className="w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500 transition-colors tracking-[0.3em]"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                    placeholder="123456"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleSendOtp}
-                  disabled={sendingOtp}
-                  className={`px-4 py-3 rounded-lg text-xs font-black uppercase tracking-widest transition-colors ${
-                    sendingOtp
-                      ? 'bg-neutral-300 text-neutral-500 cursor-not-allowed'
-                      : 'bg-neutral-900 text-white hover:bg-orange-600'
-                  }`}
-                >
-                  {sendingOtp ? 'Sending...' : otpSent ? 'Resend OTP' : 'Send OTP'}
-                </button>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleVerifyOtp}
-                className={`w-full py-3 rounded-lg text-xs font-black uppercase tracking-widest transition-colors ${
-                  otpVerified
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-white border-2 border-neutral-200 text-neutral-900 hover:border-orange-500'
-                }`}
-              >
-                {otpVerified ? 'OTP Verified' : 'Verify OTP'}
-              </button>
-
-              <div className="text-[10px] text-neutral-400 font-bold uppercase tracking-wide">
-                Demo mode: OTP is simulated for both email and phone verification.
-              </div>
-            </>
-          )}
-
           <button
             type="submit"
-            className="w-full bg-neutral-900 text-white font-black uppercase tracking-widest py-4 rounded-lg hover:bg-orange-600 transition-all mt-6 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+            disabled={submitting}
+            className={`w-full text-white font-black uppercase tracking-widest py-4 rounded-lg transition-all mt-6 shadow-lg ${
+              submitting
+                ? 'bg-neutral-400 cursor-not-allowed'
+                : 'bg-neutral-900 hover:bg-orange-600 hover:shadow-xl transform hover:-translate-y-0.5'
+            }`}
           >
-            {isLogin ? 'Sign In' : 'Create Account'}
+            {submitting ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
           </button>
         </form>
-
-        <div className="mt-6 flex items-center gap-4">
-          <div className="h-px bg-neutral-200 flex-1"></div>
-          <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">
-            OR
-          </span>
-          <div className="h-px bg-neutral-200 flex-1"></div>
-        </div>
-
-        <div className="mt-6">
-          <button
-            type="button"
-            onClick={handleGoogleLogin}
-            className="w-full bg-white border-2 border-neutral-200 text-neutral-900 font-bold uppercase tracking-wider py-3 rounded-lg hover:bg-neutral-50 transition-all flex items-center justify-center gap-2 text-xs group"
-          >
-            <i className="fab fa-google text-red-500 group-hover:scale-110 transition-transform"></i>
-            Sign in with Google
-          </button>
-        </div>
-
-        <div className="mt-8 pt-6 border-t-2 border-neutral-100 text-[10px] text-neutral-400 text-center font-mono uppercase">
-          <p className="font-bold mb-2">Demo Access:</p>
-          <p>Admin: admin@unisport.com / admin123</p>
-          <p>Owner: owner@padel.com / owner123</p>
-          <p>User: player@demo.com / player123</p>
-        </div>
       </div>
     </div>
   );
