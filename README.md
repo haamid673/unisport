@@ -59,6 +59,33 @@ even before the cron sweep updates them. The answer is a snapshot, not a
 reservation: `create_booking()` is still the authority. A failed read
 shows an error with Retry; slots are never assumed available.
 
+**Facility approval** (migration `20261010180700`): a facility created by an
+owner must start with status `pending`; an insert with `active`, `suspended`
+or `rejected` is refused, so owners cannot self-approve. Only an admin can
+activate a facility (change `pending` to `active`).
+
+**Limits enforced by the database** (migrations `20261010180800`,
+`20261010180900`; the UI is not the control):
+
+- at most 3 *live* unpaid holds per user (`pending_payment` with
+  `expires_at` still in the future); error `UB001`. A user holding a live
+  waitlist offer for a slot may still book/accept that slot at the cap.
+- at most 10 *active* waitlist entries per user (waiting for a future date,
+  or offered with the offer still open); error `UB002`.
+- bookings, waitlist joins and availability reads accept dates up to
+  `current_date + 31` (error `22008`). This is a **temporary
+  compatibility bound** (UI allows 30 days from the browser's local date,
+  the server only knows the UTC date); replace it when facilities get a
+  time zone.
+
+Counts use the clock, so expired holds and offers free capacity even before
+the cleanup job runs. Per-user actions are serialised by an advisory lock.
+Every *blocking* path takes locks in the order user, slot, waitlist entry.
+`leave_waitlist` takes an entry row lock first but only a non-blocking
+try-lock on the slot, so it cannot create a blocking lock-order inversion.
+Several accounts, rate limiting, CAPTCHA and retention of old rows are not
+addressed here.
+
 Still mock-backed (localStorage, not yet on Supabase): bookings and
 payments, community groups/events, the admin user list, and the owner and
 admin dashboards (they use the mock facility service). These are keyed by

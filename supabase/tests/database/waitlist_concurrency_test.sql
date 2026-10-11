@@ -13,6 +13,14 @@
 --   S2  booking in flight, worker decides
 --   S3  direct booking + accept by the same user    (deadlock)
 --   S4  offer decision rolls back, booking proceeds
+--   S5  same user, two slots, at 2 holds            (hold cap race)
+--   S6  same user, two waitlists, at 9 entries      (entry cap race)
+--   S7  accept first, then direct booking           (deadlock, other order)
+--   S8  a different user is not blocked
+--
+-- Lock order enforced by the functions (user -> slot -> entry row):
+-- S5/S6/S8 observe the user lock, S3/S7 prove that the two orders
+-- of start cannot deadlock.
 --
 -- Every "is waiting" assertion is made by looking at pg_locks
 -- for that session's backend pid, not by sleeping.
@@ -194,7 +202,7 @@ select (:'prereq_msg' = 'ok') as prereq_ok \gset
 
 \if :prereq_ok
 
-select plan(14);
+select plan(27);
 
 
 -- ------------------------------------------------------------
@@ -227,6 +235,15 @@ as $$
       || (current_date + p_day)::text,
     0
   )
+$$;
+
+-- Per-user advisory lock key, identical to the one used by the
+-- functions (create_booking, join_waitlist, accept_waitlist_offer).
+create function pg_temp.user_key(p_user uuid)
+returns bigint
+language sql
+as $$
+  select hashtextextended('user-actions:' || p_user::text, 0)
 $$;
 
 -- Make the slot busy, queue p_user behind it, free the slot.
@@ -412,7 +429,7 @@ begin
     '',
     now(),
     jsonb_build_object('full_name', 'Waitlist Concurrency User ' || n)
-  from generate_series(0, 7) n;
+  from generate_series(0, 9) n;
 
   insert into public.facilities (
     id, owner_id, name, description, sport, address, city, status, base_price
@@ -443,6 +460,66 @@ begin
   )
   select 'cc100000-0000-0000-0000-000000000001', d, '08:00', '22:00', false
   from generate_series(0, 6) d;
+
+  -- Extra slots 02..11 (08:00 .. 17:00) for the cap scenarios:
+  --   02,03  U8's two existing holds (S5)
+  --   04,05  the two slots U8 books concurrently (S5)
+  --   06,07  two different users book different slots (S8)
+  --   08     nine existing waitlist entries of U9, one per date (S6)
+  --   09,10  the two slots U9 joins concurrently (S6)
+  insert into public.facility_slots (
+    id, facility_id, start_time, end_time, duration_min, base_price, is_active
+  )
+  select
+    ('cc200000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid,
+    'cc100000-0000-0000-0000-000000000001',
+    time '08:00' + (n - 2) * interval '1 hour',
+    time '09:00' + (n - 2) * interval '1 hour',
+    60, 500, true
+  from generate_series(2, 11) n;
+
+  -- S5: U8 already holds two live unpaid slots on current_date + 9.
+  insert into public.bookings (
+    user_id, facility_id, slot_id, booking_date, start_time, end_time,
+    amount, status, payment_status, expires_at
+  )
+  select
+    'cc000000-0000-0000-0000-000000000008',
+    'cc100000-0000-0000-0000-000000000001',
+    ('cc200000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid,
+    current_date + 9,
+    time '08:00' + (n - 2) * interval '1 hour',
+    time '09:00' + (n - 2) * interval '1 hour',
+    500, 'pending_payment', 'pending', now() + interval '1 hour'
+  from generate_series(2, 3) n;
+
+  -- S6: U9 already has nine active waitlist entries (slot 08, one
+  -- per date, current_date + 10 .. + 18).
+  insert into public.waitlist_entries (
+    user_id, facility_id, slot_id, booking_date
+  )
+  select
+    'cc000000-0000-0000-0000-000000000009',
+    'cc100000-0000-0000-0000-000000000001',
+    'cc200000-0000-0000-0000-000000000008',
+    current_date + d
+  from generate_series(10, 18) d;
+
+  -- S6: slots 09 and 10 are taken on current_date + 20, so that they
+  -- may be waitlisted.
+  insert into public.bookings (
+    user_id, facility_id, slot_id, booking_date, start_time, end_time,
+    amount, status, payment_status
+  )
+  select
+    'cc000000-0000-0000-0000-000000000001',
+    'cc100000-0000-0000-0000-000000000001',
+    ('cc200000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid,
+    current_date + 20,
+    time '08:00' + (n - 2) * interval '1 hour',
+    time '09:00' + (n - 2) * interval '1 hour',
+    500, 'confirmed', 'paid'
+  from generate_series(9, 10) n;
 
   perform dblink_connect('a', pg_temp.conninfo());
   perform dblink_connect('b', pg_temp.conninfo());
@@ -647,11 +724,12 @@ select is(
 -- ============================================================
 -- S3  Direct booking and accept by the same user
 --
--- H holds the slot lock so that Y (direct create_booking) queues
--- first and X (accept) queues second; then H releases.
+-- H holds the slot lock so that Y (direct create_booking) takes
+-- the user lock and then queues on the slot lock, and X (accept)
+-- queues behind Y on the USER lock; then H releases.
 --
--- Correct: lock order is slot lock -> entry row for both, so Y
--- completes and X is refused cleanly.
+-- Correct: lock order is user lock -> slot lock -> entry row for
+-- both, so Y completes and X is refused cleanly.
 -- Vulnerable: X holds the entry row and waits for the slot lock,
 -- Y holds the slot lock and waits for the entry row: deadlock.
 -- ============================================================
@@ -702,9 +780,12 @@ begin
     format('select * from public.accept_waitlist_offer(%L)',
            current_setting('test.e3'))
   );
+  -- X is queued behind Y on the caller's USER lock (Y holds it
+  -- while it waits for the slot lock).
   perform set_config('test.x_queued',
     (pg_temp.observe('x', current_setting('test.pid_x')::integer,
-                     pg_temp.slot_key(5), 100) = 'waiting')::text, false);
+                     pg_temp.user_key('cc000000-0000-0000-0000-000000000002'),
+                     100) = 'waiting')::text, false);
 
   -- release: Y (first in the queue) proceeds
   perform dblink_exec('h', 'commit');
@@ -761,7 +842,7 @@ select ok(
   current_setting('test.y_queued') = 'true'
   and current_setting('test.x_queued') = 'true'
   and current_setting('test.s3_idle') = 'true',
-  'S3: both requests queued behind the lock and later completed'
+  'S3: Y waits on the slot lock, X queues behind it on the user lock, and both complete'
 );
 
 select ok(
@@ -866,6 +947,382 @@ select is(
    where e.id = current_setting('test.e4')::uuid),
   'waiting',
   'S4: the rolled-back offer left the entry waiting'
+);
+
+
+-- ============================================================
+-- S5  Same user books two different slots concurrently,
+--     already holding two (cap = 3)
+--
+-- A: U8 books slot 04 (uncommitted: holds the user lock).
+-- B: U8 books slot 05 meanwhile.
+--
+-- Correct: B waits on U8's user lock, then counts A's committed
+-- hold (3 live) and is refused with UB001. Vulnerable (slot
+-- locks only): both see 2, both insert: 4 live holds.
+-- ============================================================
+
+do $$
+begin
+  perform dblink_exec(
+    'a',
+    'begin; set local role authenticated;
+     set local request.jwt.claim.sub = ''cc000000-0000-0000-0000-000000000008'''
+  );
+  perform * from dblink(
+    'a',
+    'select * from public.create_booking(
+       ''cc100000-0000-0000-0000-000000000001'',
+       ''cc200000-0000-0000-0000-000000000004'',
+       current_date + 9)'
+  ) as t(a text, b text, c text);
+
+  perform dblink_exec(
+    'b',
+    'begin; set local role authenticated;
+     set local request.jwt.claim.sub = ''cc000000-0000-0000-0000-000000000008'''
+  );
+  perform dblink_send_query(
+    'b',
+    'select * from public.create_booking(
+       ''cc100000-0000-0000-0000-000000000001'',
+       ''cc200000-0000-0000-0000-000000000005'',
+       current_date + 9)'
+  );
+  perform set_config('test.s5_obs', pg_temp.observe(
+    'b', current_setting('test.pid_b')::integer,
+    pg_temp.user_key('cc000000-0000-0000-0000-000000000008'), 100
+  ), false);
+end;
+$$;
+
+select is(
+  current_setting('test.s5_obs'),
+  'waiting',
+  'S5: the second booking by the same user waits on that user''s lock, not on a slot lock'
+);
+
+do $$
+begin
+  perform dblink_exec('a', 'commit');
+  perform pg_temp.wait_idle('b', 'b', 30);
+  if dblink_is_busy('b') = 1 then
+    perform dblink_cancel_query('b');
+  end if;
+  perform set_config('test.s5b', pg_temp.res3('b'), false);
+  perform dblink_exec('b', 'commit');
+end;
+$$;
+
+select is(
+  current_setting('test.s5b'),
+  'UB001: You already have the maximum number of unpaid bookings held (3). Complete payment or wait for one to expire.',
+  'S5: once the first commits, the second sees 3 live holds and is refused with UB001'
+);
+
+select is(
+  (select count(*)::text
+   from public.bookings
+   where user_id = 'cc000000-0000-0000-0000-000000000008'
+     and status = 'pending_payment'
+     and expires_at > now()),
+  '3',
+  'S5: the user ends with exactly 3 live holds, never 4'
+);
+
+
+-- ============================================================
+-- S6  Same user joins two different waitlists concurrently,
+--     already on nine (cap = 10)
+--
+-- A: U9 joins slot 09 (uncommitted: holds the user lock).
+-- B: U9 joins slot 10 meanwhile.
+--
+-- Correct: B waits on the user lock, then counts 10 and is
+-- refused with UB002. Vulnerable: both count 9 and insert.
+-- ============================================================
+
+do $$
+begin
+  perform dblink_exec(
+    'a',
+    'begin; set local role authenticated;
+     set local request.jwt.claim.sub = ''cc000000-0000-0000-0000-000000000009'''
+  );
+  perform * from dblink(
+    'a',
+    'select entry_id::text, entries_ahead::text, null::text
+     from public.join_waitlist(
+       ''cc100000-0000-0000-0000-000000000001'',
+       ''cc200000-0000-0000-0000-000000000009'',
+       current_date + 20)'
+  ) as t(a text, b text, c text);
+
+  perform dblink_exec(
+    'b',
+    'begin; set local role authenticated;
+     set local request.jwt.claim.sub = ''cc000000-0000-0000-0000-000000000009'''
+  );
+  perform dblink_send_query(
+    'b',
+    'select entry_id::text, entries_ahead::text, null::text
+     from public.join_waitlist(
+       ''cc100000-0000-0000-0000-000000000001'',
+       ''cc200000-0000-0000-0000-000000000010'',
+       current_date + 20)'
+  );
+  perform set_config('test.s6_obs', pg_temp.observe(
+    'b', current_setting('test.pid_b')::integer,
+    pg_temp.user_key('cc000000-0000-0000-0000-000000000009'), 100
+  ), false);
+end;
+$$;
+
+select is(
+  current_setting('test.s6_obs'),
+  'waiting',
+  'S6: the second join by the same user waits on that user''s lock'
+);
+
+do $$
+begin
+  perform dblink_exec('a', 'commit');
+  perform pg_temp.wait_idle('b', 'b', 30);
+  if dblink_is_busy('b') = 1 then
+    perform dblink_cancel_query('b');
+  end if;
+  perform set_config('test.s6b', pg_temp.res3('b'), false);
+  perform dblink_exec('b', 'commit');
+end;
+$$;
+
+select is(
+  current_setting('test.s6b'),
+  'UB002: You are already on the maximum number of waitlists (10). Leave one to join another.',
+  'S6: once the first commits, the second sees 10 active entries and is refused with UB002'
+);
+
+select is(
+  (select count(*)::text
+   from public.waitlist_entries
+   where user_id = 'cc000000-0000-0000-0000-000000000009'
+     and status in ('waiting', 'offered')),
+  '10',
+  'S6: the user ends with exactly 10 active entries, never 11'
+);
+
+
+-- ============================================================
+-- S7  Accept first, then a direct booking, same user, same slot
+--
+-- The reverse start order of S3. H holds the slot lock; X
+-- (accept) takes the user lock and queues on the slot lock; Y
+-- (direct booking) queues behind X on the user lock.
+--
+-- Correct: X completes and Y is refused cleanly (slot taken).
+-- Vulnerable (slot lock before user lock in accept): X holds
+-- the slot lock and wants the user lock while Y holds the user
+-- lock and wants the slot lock: deadlock.
+-- ============================================================
+
+do $$
+begin
+  perform set_config('test.e7', pg_temp.queue_user(8,
+    'cc000000-0000-0000-0000-000000000003')::text, false);
+
+  perform public.offer_next_waitlist_entry(
+    'cc200000-0000-0000-0000-000000000001', current_date + 8
+  );
+end;
+$$;
+
+do $$
+declare
+  v_x text;
+  v_y text;
+begin
+  perform dblink_exec('h', 'begin');
+  perform * from dblink(
+    'h',
+    format('select pg_advisory_xact_lock(%s) is null', pg_temp.slot_key(8))
+  ) as t(r text);
+
+  perform dblink_exec(
+    'x',
+    'begin; set local role authenticated;
+     set local request.jwt.claim.sub = ''cc000000-0000-0000-0000-000000000003'''
+  );
+  perform dblink_send_query(
+    'x',
+    format('select * from public.accept_waitlist_offer(%L)',
+           current_setting('test.e7'))
+  );
+  perform set_config('test.s7_x_queued',
+    (pg_temp.observe('x', current_setting('test.pid_x')::integer,
+                     pg_temp.slot_key(8), 100) = 'waiting')::text, false);
+
+  perform dblink_exec(
+    'y',
+    'begin; set local role authenticated;
+     set local request.jwt.claim.sub = ''cc000000-0000-0000-0000-000000000003'''
+  );
+  perform dblink_send_query(
+    'y',
+    'select * from public.create_booking(
+       ''cc100000-0000-0000-0000-000000000001'',
+       ''cc200000-0000-0000-0000-000000000001'',
+       current_date + 8)'
+  );
+  perform set_config('test.s7_y_queued',
+    (pg_temp.observe('y', current_setting('test.pid_y')::integer,
+                     pg_temp.user_key('cc000000-0000-0000-0000-000000000003'),
+                     100) = 'waiting')::text, false);
+
+  perform dblink_exec('h', 'commit');
+
+  for i in 1..80 loop
+    if v_x is null and dblink_is_busy('x') = 0 then
+      v_x := pg_temp.res3('x');
+      begin perform dblink_exec('x', 'commit');
+      exception when others then null; end;
+    end if;
+
+    if v_y is null and dblink_is_busy('y') = 0 then
+      v_y := pg_temp.res3('y');
+      begin perform dblink_exec('y', 'commit');
+      exception when others then null; end;
+    end if;
+
+    exit when v_x is not null and v_y is not null;
+    perform pg_sleep(0.1);
+  end loop;
+
+  if v_x is null then
+    perform dblink_cancel_query('x');
+    v_x := 'TIMEOUT ' || pg_temp.res3('x');
+    begin perform dblink_exec('x', 'rollback');
+    exception when others then null; end;
+  end if;
+
+  if v_y is null then
+    perform dblink_cancel_query('y');
+    v_y := 'TIMEOUT ' || pg_temp.res3('y');
+    begin perform dblink_exec('y', 'rollback');
+    exception when others then null; end;
+  end if;
+
+  perform set_config('test.s7x', v_x, false);
+  perform set_config('test.s7y', v_y, false);
+end;
+$$;
+
+select ok(
+  current_setting('test.s7_x_queued') = 'true'
+  and current_setting('test.s7_y_queued') = 'true'
+  and current_setting('test.s7x') not like 'TIMEOUT%'
+  and current_setting('test.s7y') not like 'TIMEOUT%',
+  'S7: accept waits on the slot lock, the direct booking queues behind it on the user lock, and both complete'
+);
+
+select ok(
+  current_setting('test.s7x') not like '40P01%'
+  and current_setting('test.s7y') not like '40P01%',
+  'S7: accept followed by a direct booking by the same user does not deadlock'
+);
+
+select is(
+  (select count(*)::text
+   from public.bookings
+   where user_id = 'cc000000-0000-0000-0000-000000000003'
+     and booking_date = current_date + 8
+     and status = 'pending_payment')
+  || '/' ||
+  (select e.status::text || '/' || (e.booking_id is not null)::text
+   from public.waitlist_entries e
+   where e.id = current_setting('test.e7')::uuid),
+  '1/accepted/true',
+  'S7: exactly one booking exists and the entry is linked to it'
+);
+
+select is(
+  case
+    when current_setting('test.s7x') like 'ok:%'
+     and current_setting('test.s7y') = '23P01: The selected slot is no longer available'
+    then 'accept-wins/booking-refused'
+    else current_setting('test.s7x') || ' | ' || current_setting('test.s7y')
+  end,
+  'accept-wins/booking-refused',
+  'S7: the losing direct booking gets a clean business error'
+);
+
+
+-- ============================================================
+-- S8  A different user is not blocked
+--
+-- A: U4 books slot 06 and keeps the transaction open (holds
+-- U4's user lock and slot 06's lock).
+-- B: U5 books slot 07 meanwhile.
+--
+-- Correct: the lock is per user, so B finishes without waiting.
+-- ============================================================
+
+do $$
+begin
+  perform dblink_exec(
+    'a',
+    'begin; set local role authenticated;
+     set local request.jwt.claim.sub = ''cc000000-0000-0000-0000-000000000004'''
+  );
+  perform * from dblink(
+    'a',
+    'select * from public.create_booking(
+       ''cc100000-0000-0000-0000-000000000001'',
+       ''cc200000-0000-0000-0000-000000000006'',
+       current_date + 21)'
+  ) as t(a text, b text, c text);
+
+  perform dblink_exec(
+    'b',
+    'begin; set local role authenticated;
+     set local request.jwt.claim.sub = ''cc000000-0000-0000-0000-000000000005'''
+  );
+  perform dblink_send_query(
+    'b',
+    'select * from public.create_booking(
+       ''cc100000-0000-0000-0000-000000000001'',
+       ''cc200000-0000-0000-0000-000000000007'',
+       current_date + 21)'
+  );
+  perform set_config('test.s8_obs', pg_temp.observe(
+    'b', current_setting('test.pid_b')::integer,
+    pg_temp.user_key('cc000000-0000-0000-0000-000000000004'), 100
+  ), false);
+  perform set_config('test.s8b', pg_temp.res3('b'), false);
+  perform dblink_exec('b', 'commit');
+  perform dblink_exec('a', 'commit');
+end;
+$$;
+
+select is(
+  current_setting('test.s8_obs'),
+  'finished',
+  'S8: another user''s booking finishes without waiting on the first user''s lock'
+);
+
+select ok(
+  current_setting('test.s8b') like 'ok:%',
+  'S8: the other user''s booking succeeds while the first transaction is still open'
+);
+
+select is(
+  (select count(*)::text
+   from public.bookings
+   where user_id in ('cc000000-0000-0000-0000-000000000004',
+                     'cc000000-0000-0000-0000-000000000005')
+     and booking_date = current_date + 21
+     and status = 'pending_payment'),
+  '2',
+  'S8: both users end with their booking'
 );
 
 
