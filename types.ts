@@ -4,7 +4,6 @@ export type UserRole = 'user' | 'owner' | 'admin';
 export interface User {
   id: string;
   email: string;
-  passwordHash?: string; // For real auth
   role: UserRole;
   name?: string;
   phone?: string;
