@@ -63,21 +63,6 @@ const PaymentPage: React.FC<PaymentPageProps> = ({
         date: new Date().toISOString(),
       });
 
-      console.log(`
-📧 EMAIL SENT TO: ${user.email}
-Subject: UniSport Booking Confirmation
-
-Hi ${user.name},
-
-Your booking is confirmed 🎉
-
-Transaction ID: ${fakeTransactionId}
-Amount Paid: ₹${totalAmount}
-Date: ${data.date}
-
-Thank you for choosing UniSport.
-`);
-
       if (onSuccessMessage) {
         onSuccessMessage("Payment Successful 🎉 Booking Confirmed");
       }

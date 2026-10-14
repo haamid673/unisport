@@ -414,12 +414,11 @@ select throws_ok(
   'a user cannot UPSERT a profile to change their role'
 );
 
-select is(
-  pg_temp.rows_affected(
-   $q$ delete from public.profiles
-     where id in (auth.uid(), 'f3000000-0000-0000-0000-000000000002') $q$),
-  0,
-  'a user cannot DELETE any profile, including their own'
+select throws_ok(
+  $$ delete from public.profiles
+     where id in (auth.uid(), 'f3000000-0000-0000-0000-000000000002') $$,
+  '42501', NULL,
+  'a user cannot DELETE any profile, including their own (no DELETE privilege)'
 );
 
 

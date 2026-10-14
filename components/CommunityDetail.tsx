@@ -26,7 +26,6 @@ const CommunityDetail: React.FC<Props> = ({ user, group, onBack }) => {
       .filter(e => e.groupId === group.id && e.status === 'approved');
 
     setEvents(groupEvents);
-    console.log("Updated Group:", updatedGroup);
   };
 
   useEffect(() => {

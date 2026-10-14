@@ -39,14 +39,11 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Lint
+        run: npm run lint
+
       - name: Build
         run: npm run build
-
-      # Deliberately no `tsc --noEmit` step: the codebase has 51 known,
-      # pre-existing type errors (all in code outside the recent work).
-      # A permanently red check would hide real regressions, and a
-      # suppressed one would be misleading. Add it once the baseline is
-      # fixed.
 
   database:
     name: Database (migrations + pgTAP)

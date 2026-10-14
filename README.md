@@ -15,7 +15,7 @@ View your app in AI Studio: https://ai.studio/apps/149dbc7e-c03b-4e1f-b277-7616f
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Configure Supabase (see the next section).
 3. Run the app:
    `npm run dev`
 
@@ -86,15 +86,44 @@ try-lock on the slot, so it cannot create a blocking lock-order inversion.
 Several accounts, rate limiting, CAPTCHA and retention of old rows are not
 addressed here.
 
-Still mock-backed (localStorage, not yet on Supabase): bookings and
-payments, community groups/events, the admin user list, and the owner and
-admin dashboards (they use the mock facility service). These are keyed by
-mock ids, so seeded demo data does not belong to a real signed-in user.
+## What is implemented
 
-**Checkout is disabled** (`CUSTOMER_CHECKOUT_ENABLED = false` in
-`services/bookingService.ts`): the mock checkout cannot create bookings
-for real slots, so slots show "Soon" until booking goes through the
-`create_booking()` RPC and a real payment flow.
+Backed by Supabase (database rules and Row Level Security are the
+authority; the UI only decides what to show):
+
+- **Accounts:** sign-up, sign-in, sessions, profile name/phone. Roles
+  are assigned in the database; sign-up always creates a `user`.
+- **Customer:** facility discovery by city (the chosen city is remembered
+  per user in this browser), slot availability, reservations, waitlists
+  (join, leave, accept an offer) and a booking history on the profile.
+- **Owner:** create and edit venues (always created `pending`), weekly
+  operating hours, add slots and switch them on/off, and a read-only list
+  of the venue's latest bookings.
+- **Data integrity in the database:** no overlapping slots or bookings at
+  one facility, a slot never changes facility, and a slot's times are
+  frozen while live bookings or waitlist entries reference it.
+
+**A reservation is an unpaid 10-minute hold.** It expires automatically.
+Accepting a waitlist offer also creates a hold, not a paid booking.
+
+## Not implemented yet
+
+- **Payments and booking confirmation:** there is no payment provider and
+  nothing in the app turns a hold into a `confirmed` booking. Cancellation
+  and refunds do not exist either. `components/PaymentPage.tsx` and
+  `services/bookingService.ts` are leftover mock code that is not
+  reachable from the UI (`CUSTOMER_CHECKOUT_ENABLED = false`).
+- **Admin console:** `AdminDashboard` is an explicit placeholder with no
+  actions. Venue approval and role changes are made directly in the
+  database by an administrator.
+- **Communities and events:** the screens show an empty state; groups and
+  events are not stored in Supabase and cannot be created.
+- **Image uploads:** there is no storage bucket or upload UI. Venue images
+  are bundled defaults (`public/images`) or external stock photos.
+- **Notifications:** none (no email, SMS or push); offers and holds are
+  only visible in the app.
+- **Browser-only extras:** profile bio and preferences are stored in this
+  browser, not in the database.
 
 ## Development data (local only)
 

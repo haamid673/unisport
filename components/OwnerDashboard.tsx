@@ -1,2508 +1,936 @@
-// import React, { useState, useEffect } from 'react';
-// import { facilityService } from '../services/facilityService';
-// import { getAllBookings } from '../services/bookingService';
-// import { Facility, Slot, User, Booking } from '../types';
-
-// interface OwnerDashboardProps {
-//   user: User;
-// }
-
-// const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user }) => {
-//   const [myFacilities, setMyFacilities] = useState<Facility[]>([]);
-//   const [selectedFac, setSelectedFac] = useState<Facility | null>(null);
-//   const [facSlots, setFacSlots] = useState<Slot[]>([]);
-//   const [allBookings, setAllBookings] = useState<Booking[]>([]);
-
-//   useEffect(() => {
-//     refreshData();
-//   }, [user.id]);
-
-//   const refreshData = () => {
-//     const facilities = facilityService
-//       .getAllFacilities(true)
-//       .filter(f => f.ownerId === user.id);
-
-//     setMyFacilities(facilities);
-//     setAllBookings(getAllBookings());
-
-//     if (selectedFac) {
-//       setFacSlots(
-//         facilityService.getSlotsByFacility(selectedFac.id)
-//       );
-//     }
-//   };
-
-//   /* =====================================
-//      DEMAND ANALYSIS
-//   ====================================== */
-
-//   const analyzeDemand = (slotId: string) => {
-//     const confirmed = allBookings.filter(
-//       b => b.slotId === slotId && b.status === "confirmed"
-//     );
-
-//     const uniqueDays = [
-//       ...new Set(confirmed.map(b => b.bookingDate))
-//     ].sort(
-//       (a, b) => new Date(b).getTime() - new Date(a).getTime()
-//     );
-
-//     if (uniqueDays.length === 0) {
-//       return {
-//         demandScore: 0,
-//         streak: 0,
-//         reason: "No booking activity"
-//       };
-//     }
-
-//     let streak = 1;
-
-//     for (let i = 0; i < uniqueDays.length - 1; i++) {
-//       const current = new Date(uniqueDays[i]);
-//       const next = new Date(uniqueDays[i + 1]);
-
-//       const diff =
-//         (current.getTime() - next.getTime()) /
-//         (1000 * 60 * 60 * 24);
-
-//       if (diff === 1) streak++;
-//       else break;
-//     }
-
-//     const demandScore = Math.min(100, streak * 20);
-
-//     let reason = "Stable demand";
-//     if (streak >= 5) reason = `${streak}-day booking streak`;
-//     else if (streak >= 3) reason = `Rising trend (${streak} days)`;
-
-//     return { demandScore, streak, reason };
-//   };
-
-//   /* =====================================
-//      ADAPTIVE SURGE ENGINE
-//   ====================================== */
-
-//   const calculateSurgeMultiplier = (demandScore: number) => {
-//     const baseSurge = 0.05;   // 5%
-//     const surgeRange = 0.15;  // additional up to 15% (max 20%)
-//     const surgePercent = baseSurge + (demandScore / 100) * surgeRange;
-//     return 1 + surgePercent;
-//   };
-
-//   const enableSurge = (slot: Slot) => {
-//     const demand = analyzeDemand(slot.id);
-//     const multiplier = calculateSurgeMultiplier(demand.demandScore);
-
-//     facilityService.updateSlot(slot.id, {
-//       price: Math.round(slot.price * multiplier),
-//       surgeEnabled: true,
-//       surgeMultiplier: multiplier
-//     });
-
-//     refreshData();
-//   };
-
-//   const disableSurge = (slot: Slot) => {
-//     const original =
-//       Math.round(slot.price / (slot.surgeMultiplier || 1));
-
-//     facilityService.updateSlot(slot.id, {
-//       price: original,
-//       surgeEnabled: false,
-//       surgeMultiplier: 1
-//     });
-
-//     refreshData();
-//   };
-
-//   /* =====================================
-//      REVENUE METRICS
-//   ====================================== */
-
-//   const facilitySlotIds = facSlots.map(s => s.id);
-
-//   const confirmedBookings = allBookings.filter(
-//     b =>
-//       facilitySlotIds.includes(b.slotId) &&
-//       b.status === "confirmed"
-//   );
-
-//   const totalRevenue = confirmedBookings.reduce((sum, b) => {
-//     const slot = facSlots.find(s => s.id === b.slotId);
-//     return sum + (slot?.price || 0);
-//   }, 0);
-
-//   /* =====================================
-//      UI
-//   ====================================== */
-
-//   return (
-//     <div className="max-w-7xl mx-auto px-4 py-8 font-sans">
-
-//       <h2 className="text-5xl font-black uppercase italic mb-12">
-//         Owner Dashboard
-//       </h2>
-
-//       <div className="grid grid-cols-4 gap-8">
-
-//         {/* Sidebar */}
-//         <div className="col-span-1 space-y-4">
-//           {myFacilities.map(f => (
-//             <div
-//               key={f.id}
-//               onClick={() => {
-//                 setSelectedFac(f);
-//                 setFacSlots(
-//                   facilityService.getSlotsByFacility(f.id)
-//                 );
-//               }}
-//               className={`p-4 rounded-lg border-2 cursor-pointer ${
-//                 selectedFac?.id === f.id
-//                   ? 'bg-neutral-900 text-white border-neutral-900'
-//                   : 'bg-white border-neutral-200'
-//               }`}
-//             >
-//               <p className="font-bold uppercase">{f.name}</p>
-//               <p className="text-xs text-neutral-400">
-//                 {f.sport} • {f.location}
-//               </p>
-//             </div>
-//           ))}
-//         </div>
-
-//         {/* Main */}
-//         <div className="col-span-3 space-y-8">
-
-//           {selectedFac && (
-//             <>
-//               <div className="bg-white p-6 rounded-lg border-2">
-//                 <p className="text-xs text-neutral-400 uppercase">
-//                   Estimated Revenue
-//                 </p>
-//                 <p className="text-3xl font-black">
-//                   ₹{totalRevenue.toFixed(2)}
-//                 </p>
-//               </div>
-
-//               <div className="bg-white p-6 rounded-lg border-2">
-//                 <h4 className="font-black uppercase mb-6">
-//                   Adaptive Surge Pricing
-//                 </h4>
-
-//                 <div className="grid grid-cols-2 gap-4">
-
-//                   {facSlots.map(slot => {
-//                     const demand = analyzeDemand(slot.id);
-//                     const projectedMultiplier =
-//                       calculateSurgeMultiplier(demand.demandScore);
-
-//                     const projectedPercent =
-//                       Math.round((projectedMultiplier - 1) * 100);
-
-//                     return (
-//                       <div
-//                         key={slot.id}
-//                         className="p-4 rounded-lg border-2 bg-neutral-50"
-//                       >
-//                         <p className="font-black uppercase">
-//                           {slot.time}
-//                         </p>
-
-//                         <p className="text-lg mt-1">
-//                           ₹{slot.price}
-//                         </p>
-
-//                         <p className="text-[9px] mt-2 uppercase font-bold text-neutral-400">
-//                           Demand Score: {demand.demandScore}%
-//                         </p>
-
-//                         <p className="text-[9px] text-neutral-500">
-//                           {demand.reason}
-//                         </p>
-
-//                         {!slot.surgeEnabled && (
-//                           <>
-//                             <p className="text-[10px] text-orange-600 font-black uppercase mt-3">
-//                               Suggested Surge: +{projectedPercent}%
-//                             </p>
-
-//                             <button
-//                               onClick={() => enableSurge(slot)}
-//                               className="mt-3 px-5 py-2 rounded-xl bg-neutral-900 text-white text-[10px] font-black uppercase tracking-widest
-//                                          border-2 border-neutral-900
-//                                          hover:bg-orange-600 hover:border-orange-700
-//                                          transition-all duration-150 active:scale-95"
-//                             >
-//                               Enable Surge
-//                             </button>
-//                           </>
-//                         )}
-
-//                         {slot.surgeEnabled && (
-//                           <button
-//                             onClick={() => disableSurge(slot)}
-//                             className="mt-3 px-5 py-2 rounded-xl bg-white text-red-600 text-[10px] font-black uppercase tracking-widest
-//                                        border-2 border-red-600
-//                                        hover:bg-red-600 hover:text-white
-//                                        transition-all duration-150 active:scale-95"
-//                           >
-//                             Disable Surge
-//                           </button>
-//                         )}
-//                       </div>
-//                     );
-//                   })}
-
-//                 </div>
-//               </div>
-//             </>
-//           )}
-
-//         </div>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default OwnerDashboard;
-
-
-
-/* 
-
-
-
-import React, { useState, useEffect } from 'react';
-import { facilityService } from '../services/facilityService';
-import { getAllBookings } from '../services/bookingService';
-import { Facility, Slot, User, Booking } from '../types';
-
-interface OwnerDashboardProps {
-  user: User;
-}
-
-const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user }) => {
-  const [myFacilities, setMyFacilities] = useState<Facility[]>([]);
-  const [selectedFac, setSelectedFac] = useState<Facility | null>(null);
-  const [facSlots, setFacSlots] = useState<Slot[]>([]);
-  const [allBookings, setAllBookings] = useState<Booking[]>([]);
-
-  const [showAddSlotModal, setShowAddSlotModal] = useState(false);
-  const [showNewVenueModal, setShowNewVenueModal] = useState(false);
-  const [showEditSlotModal, setShowEditSlotModal] = useState(false);
-  const [editingSlot, setEditingSlot] = useState<Slot | null>(null);
-
-  const [slotForm, setSlotForm] = useState({
-    startTime: '06:00 AM',
-    endTime: '07:00 AM',
-    price: ''
-  });
-
-  const [venueForm, setVenueForm] = useState({
-    name: '',
-    sport: 'Football',
-    location: '',
-    basePrice: '',
-    imageUrl: ''
-  });
-
-  useEffect(() => {
-    refreshData();
-  }, [user.id]);
-
-  const refreshData = () => {
-    const facilities = facilityService
-      .getAllFacilities(true)
-      .filter(f => f.ownerId === user.id);
-
-    const bookings = getAllBookings();
-
-    setMyFacilities(facilities);
-    setAllBookings(bookings);
-
-    const activeFacility =
-      selectedFac
-        ? facilities.find(f => f.id === selectedFac.id) || facilities[0]
-        : facilities[0];
-
-    if (activeFacility) {
-      setSelectedFac(activeFacility);
-      setFacSlots(facilityService.getSlotsByFacility(activeFacility.id));
-    } else {
-      setSelectedFac(null);
-      setFacSlots([]);
-    }
-  };
-
-  const handleSelectFacility = (facility: Facility) => {
-    setSelectedFac(facility);
-    setFacSlots(facilityService.getSlotsByFacility(facility.id));
-  };
-
-  const resetSlotForm = () => {
-    setSlotForm({
-      startTime: '06:00 AM',
-      endTime: '07:00 AM',
-      price: ''
-    });
-  };
-
-  const resetVenueForm = () => {
-    setVenueForm({
-      name: '',
-      sport: 'Football',
-      location: '',
-      basePrice: '',
-      imageUrl: ''
-    });
-  };
-
-  const getDefaultSportImage = (sport: string) => {
-    switch (sport.toLowerCase()) {
-      case 'badminton':
-        return 'images/stephan-rothe-VePgmkq3hHI-unsplash.jpg';
-      case 'football':
-        return 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?q=80&w=800&auto=format&fit=crop';
-      case 'basketball':
-        return 'https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=800&auto=format&fit=crop';
-      case 'cricket':
-        return 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?q=80&w=800&auto=format&fit=crop';
-      case 'tennis':
-        return 'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?q=80&w=800&auto=format&fit=crop';
-      case 'padel':
-        return 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?q=80&w=800&auto=format&fit=crop';
-      case 'swimming':
-        return 'https://images.unsplash.com/photo-1530549387789-4c1017266635?q=80&w=800&auto=format&fit=crop';
-      case 'gym':
-        return 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=800&auto=format&fit=crop';
-      case 'yoga':
-        return 'images/ginny-rose-stewart-UxkcSzRWM2s-unsplash.jpg';
-      case 'table tennis':
-        return 'images/inkiipow-7h9wGq4IUdE-unsplash.jpg';
-      default:
-        return 'https://images.unsplash.com/photo-1517649763962-0c623066013b?q=80&w=800&auto=format&fit=crop';
-    }
-  };
-
-  const handleAddSlot = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!selectedFac) return;
-
-    const priceValue = Number(slotForm.price);
-
-    if (!slotForm.startTime || !slotForm.endTime || !priceValue) {
-      alert('Please fill all slot fields.');
-      return;
-    }
-
-    const time = `${slotForm.startTime} - ${slotForm.endTime}`;
-
-    const duplicate = facSlots.some(
-      slot => slot.time.trim().toLowerCase() === time.trim().toLowerCase()
-    );
-
-    if (duplicate) {
-      alert('A slot with the same time already exists for this facility.');
-      return;
-    }
-
-    facilityService.addSlot({
-      facilityId: selectedFac.id,
-      time,
-      price: priceValue,
-      surgeEnabled: false,
-      surgeMultiplier: 1
-    });
-
-    refreshData();
-    resetSlotForm();
-    setShowAddSlotModal(false);
-  };
-
-  const handleAddVenue = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const basePrice = Number(venueForm.basePrice);
-
-    if (!venueForm.name || !venueForm.sport || !venueForm.location || !basePrice) {
-      alert('Please fill all venue fields.');
-      return;
-    }
-
-    const allFacilities = facilityService.getAllFacilities(true);
-
-    const duplicate = allFacilities.some(
-      f =>
-        f.name.trim().toLowerCase() === venueForm.name.trim().toLowerCase() &&
-        f.location.trim().toLowerCase() === venueForm.location.trim().toLowerCase()
-    );
-
-    if (duplicate) {
-      alert('A venue with the same name and location already exists.');
-      return;
-    }
-
-    const newFacility: Facility = {
-      id: `owner_fac_${Date.now()}`,
-      name: venueForm.name.trim(),
-      sport: venueForm.sport,
-      location: venueForm.location.trim(),
-      basePrice,
-      ownerId: user.id,
-      imageUrl: venueForm.imageUrl.trim() || getDefaultSportImage(venueForm.sport),
-      rating: 4.5,
-      status: 'approved'
-    };
-
-    const updatedFacilities = [...allFacilities, newFacility];
-    localStorage.setItem('unisport_facilities_v5', JSON.stringify(updatedFacilities));
-
-    refreshData();
-    setSelectedFac(newFacility);
-    setFacSlots([]);
-    resetVenueForm();
-    setShowNewVenueModal(false);
-  };
-
-  const facilitySlotIds = facSlots.map(s => s.id);
-
-  const confirmedBookings = allBookings.filter(
-    b => facilitySlotIds.includes(b.slotId) && b.status === 'confirmed'
-  );
-
-  const totalRevenue = confirmedBookings.reduce((sum, booking) => {
-    const slot = facSlots.find(s => s.id === booking.slotId);
-    return sum + (slot?.price || 0);
-  }, 0);
-
-  const recentBookings = [...confirmedBookings]
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt || b.bookingDate).getTime() -
-        new Date(a.createdAt || a.bookingDate).getTime()
-    )
-    .slice(0, 6);
-
-  const getSlotBookingCount = (slotId: string) => {
-    return allBookings.filter(
-      b => b.slotId === slotId && b.status === 'confirmed'
-    ).length;
-  };
-
-  const analyzeDemand = (slotId: string) => {
-    const confirmed = allBookings.filter(
-      b => b.slotId === slotId && b.status === 'confirmed'
-    );
-
-    const uniqueDays = [...new Set(confirmed.map(b => b.bookingDate))].sort(
-      (a, b) => new Date(b).getTime() - new Date(a).getTime()
-    );
-
-    if (uniqueDays.length === 0) {
-      return {
-        demandScore: 0,
-        streak: 0,
-        reason: 'No booking activity'
-      };
-    }
-
-    let streak = 1;
-
-    for (let i = 0; i < uniqueDays.length - 1; i++) {
-      const current = new Date(uniqueDays[i]);
-      const next = new Date(uniqueDays[i + 1]);
-      const diff =
-        (current.getTime() - next.getTime()) / (1000 * 60 * 60 * 24);
-
-      if (diff === 1) streak++;
-      else break;
-    }
-
-    const demandScore = Math.min(100, streak * 20);
-
-    let reason = 'Stable demand';
-    if (streak >= 5) reason = `${streak}-day booking streak`;
-    else if (streak >= 3) reason = `Rising trend (${streak} days)`;
-
-    return { demandScore, streak, reason };
-  };
-
-  const calculateSurgeMultiplier = (demandScore: number) => {
-    const baseSurge = 0.05;
-    const surgeRange = 0.15;
-    const surgePercent = baseSurge + (demandScore / 100) * surgeRange;
-    return 1 + surgePercent;
-  };
-
-  const enableSurge = (slot: Slot) => {
-    if (slot.surgeEnabled) return;
-
-    const demand = analyzeDemand(slot.id);
-    const multiplier = calculateSurgeMultiplier(demand.demandScore);
-
-    facilityService.updateSlot(slot.id, {
-      price: Math.round(slot.price * multiplier),
-      surgeEnabled: true,
-      surgeMultiplier: multiplier
-    });
-
-    refreshData();
-  };
-
-  const disableSurge = (slot: Slot) => {
-    const original = Math.round(slot.price / (slot.surgeMultiplier || 1));
-
-    facilityService.updateSlot(slot.id, {
-      price: original,
-      surgeEnabled: false,
-      surgeMultiplier: 1
-    });
-
-    refreshData();
-  };
-
-  const getSlotIntelligence = (slot: Slot) => {
-    const bookingCount = getSlotBookingCount(slot.id);
-    const demand = analyzeDemand(slot.id);
-
-    if (bookingCount === 0) {
-      return {
-        status: 'Underperforming',
-        statusClass: 'bg-red-900/50 text-red-300 border border-red-800',
-        suggestion: 'Run 15% promo to increase occupancy',
-        impact: '+15% revenue impact'
-      };
-    }
-
-    if (bookingCount === 1) {
-      return {
-        status: 'Needs Push',
-        statusClass: 'bg-yellow-900/50 text-yellow-300 border border-yellow-800',
-        suggestion: 'Run 10% promo to attract first-time bookings',
-        impact: '+8% revenue impact'
-      };
-    }
-
-    if (demand.demandScore >= 60) {
-      return {
-        status: 'High Performing',
-        statusClass: 'bg-emerald-900/50 text-emerald-300 border border-emerald-800',
-        suggestion: 'Enable surge to maximize peak-hour yield',
-        impact: '+12% revenue impact'
-      };
-    }
-
-    return {
-      status: 'Stable',
-      statusClass: 'bg-neutral-800 text-neutral-300 border border-neutral-700',
-      suggestion: 'Maintain pricing and monitor booking trend',
-      impact: '+4% revenue impact'
-    };
-  };
-
-  const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-  const getWeekdayFromDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const jsDay = date.getDay();
-    return jsDay === 0 ? 6 : jsDay - 1;
-  };
-
-  const getHeatmapValue = (slotId: string, weekdayIndex: number) => {
-    return allBookings.filter(b => {
-      if (b.slotId !== slotId || b.status !== 'confirmed') return false;
-      return getWeekdayFromDate(b.bookingDate) === weekdayIndex;
-    }).length;
-  };
-
-  const getHeatmapCellClass = (value: number) => {
-    if (value >= 3) return 'bg-neutral-950';
-    if (value === 2) return 'bg-neutral-700';
-    if (value === 1) return 'bg-neutral-300';
-    return 'bg-neutral-100';
-  };
-
-
-  const handleEditSlot = (slot: Slot) => {
-  setEditingSlot(slot);
-
-  const parts = slot.time.split(" - ");
-
-  setSlotForm({
-    startTime: parts[0],
-    endTime: parts[1],
-    price: String(slot.price)
-  });
-
-  setShowEditSlotModal(true);
-};
-
-const handleSaveSlotEdit = (e: React.FormEvent) => {
-  e.preventDefault();
-
-  if (!editingSlot) return;
-
-  const time = `${slotForm.startTime} - ${slotForm.endTime}`;
-  const price = Number(slotForm.price);
-
-  facilityService.updateSlot(editingSlot.id, {
-    time,
-    price
-  });
-
-  refreshData();
-
-  setShowEditSlotModal(false);
-  setEditingSlot(null);
-  resetSlotForm();
-};
-
-const deleteSlot = (slot: Slot) => {
-  if (!confirm("Delete this slot?")) return;
-
-  const slots = facilityService.getSlotsByFacility(selectedFac!.id);
-
-  const updated = slots.filter(s => s.id !== slot.id);
-
-  localStorage.setItem(
-    "unisport_slots_v5",
-    JSON.stringify(updated)
-  );
-
-  refreshData();
-};
-
-
-  return (
-    <div className="max-w-7xl mx-auto px-4 py-8 font-sans">
-      <div className="flex items-end justify-between gap-6 mb-10 border-b-2 border-neutral-900 pb-5">
-        <div>
-          <h2 className="text-5xl font-black uppercase italic tracking-tighter">
-            Owner Dashboard
-          </h2>
-          <p className="text-neutral-500 font-bold uppercase tracking-widest text-xs mt-2">
-            Manage your facilities and pricing.
-          </p>
-        </div>
-
-        <button
-          onClick={() => setShowNewVenueModal(true)}
-          className="px-5 py-3 bg-neutral-900 text-white rounded-md text-xs font-black uppercase tracking-widest hover:bg-orange-600 transition-colors"
-        >
-          + New Venue
-        </button>
-      </div>
-
-      <div className="grid grid-cols-4 gap-8">
-        <div className="col-span-1">
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
-              Inventory
-            </p>
-            <span className="px-2 py-1 rounded-sm bg-neutral-100 text-neutral-500 text-[9px] font-black uppercase tracking-wider">
-              {myFacilities.length} total
-            </span>
-          </div>
-
-          <div className="mb-4">
-            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-wider border border-emerald-200">
-              <i className="fas fa-shield-alt"></i>
-              Verified Ownership
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            {myFacilities.map(f => (
-              <div
-                key={f.id}
-                onClick={() => handleSelectFacility(f)}
-                className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                  selectedFac?.id === f.id
-                    ? 'bg-neutral-900 text-white border-neutral-900'
-                    : 'bg-white border-neutral-200 hover:border-neutral-400'
-                }`}
-              >
-                <div className="flex justify-between items-start gap-3">
-                  <div className="min-w-0">
-                    <p className="font-black uppercase truncate">{f.name}</p>
-                    <p
-                      className={`text-[10px] uppercase tracking-wide mt-1 ${
-                        selectedFac?.id === f.id
-                          ? 'text-neutral-300'
-                          : 'text-neutral-400'
-                      }`}
-                    >
-                      {f.sport} • {f.location}
-                    </p>
-                  </div>
-
-                  <i
-                    className={`fas fa-chevron-right text-xs mt-1 ${
-                      selectedFac?.id === f.id
-                        ? 'text-orange-500'
-                        : 'text-neutral-300'
-                    }`}
-                  ></i>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="col-span-3 space-y-6">
-          {selectedFac ? (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white p-5 rounded-lg border-2 border-neutral-200">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
-                    Estimated Revenue
-                  </p>
-                  <p className="text-4xl font-black text-neutral-900 mt-2">
-                    ₹{totalRevenue.toFixed(2)}
-                  </p>
-                </div>
-
-                <div className="bg-white p-5 rounded-lg border-2 border-neutral-200">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
-                    Active Slots
-                  </p>
-                  <p className="text-4xl font-black text-neutral-900 mt-2">
-                    {facSlots.length}
-                  </p>
-                </div>
-
-                <div className="bg-white p-5 rounded-lg border-2 border-neutral-200">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
-                    Total Bookings
-                  </p>
-                  <p className="text-4xl font-black text-orange-600 mt-2">
-                    {confirmedBookings.length}
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-neutral-950 text-white p-6 rounded-lg border border-neutral-800">
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="w-8 h-8 bg-orange-600 rounded-sm flex items-center justify-center">
-                    <i className="fas fa-brain text-white text-sm"></i>
-                  </div>
-                  <div>
-                    <h4 className="font-black uppercase italic tracking-tight">
-                      AI Revenue Intelligence
-                    </h4>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">
-                      Real-time optimization suggestions
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {facSlots.map(slot => {
-                    const intel = getSlotIntelligence(slot);
-                    return (
-                      <div
-                        key={slot.id}
-                        className="bg-neutral-900 border border-neutral-700 rounded-md p-4"
-                      >
-                        <div className="flex justify-between items-start gap-3 mb-3">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
-                            {slot.time}
-                          </p>
-                          <span
-                            className={`text-[8px] px-2 py-1 rounded-sm font-black uppercase tracking-wider ${intel.statusClass}`}
-                          >
-                            {intel.status}
-                          </span>
-                        </div>
-
-                        <p className="text-sm font-black uppercase leading-snug">
-                          {intel.suggestion}
-                        </p>
-
-                        <p className="text-[10px] font-black uppercase tracking-wider text-emerald-400 mt-3">
-                          ↗ {intel.impact}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="bg-white p-6 rounded-lg border-2 border-neutral-200">
-                <h4 className="font-black uppercase text-sm mb-5">
-                  Weekly Occupancy Heatmap
-                </h4>
-
-                {facSlots.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <div className="min-w-[560px]">
-                      <div
-                        className="grid gap-2 mb-3"
-                        style={{
-                          gridTemplateColumns: `80px repeat(${facSlots.length}, minmax(120px, 1fr))`
-                        }}
-                      >
-                        <div></div>
-                        {facSlots.map(slot => (
-                          <div
-                            key={slot.id}
-                            className="text-[10px] font-black uppercase tracking-widest text-neutral-300 text-center"
-                          >
-                            {slot.time.split(' - ')[0]}
-                          </div>
-                        ))}
-                      </div>
-
-                      {weekdayLabels.map((day, weekdayIndex) => (
-                        <div
-                          key={day}
-                          className="grid gap-2 mb-2"
-                          style={{
-                            gridTemplateColumns: `80px repeat(${facSlots.length}, minmax(120px, 1fr))`
-                          }}
-                        >
-                          <div className="text-[10px] font-black uppercase tracking-widest text-neutral-400 flex items-center">
-                            {day}
-                          </div>
-
-                          {facSlots.map(slot => {
-                            const value = getHeatmapValue(slot.id, weekdayIndex);
-                            return (
-                              <div
-                                key={`${day}-${slot.id}`}
-                                className={`h-8 rounded-sm ${getHeatmapCellClass(value)}`}
-                                title={`${day} • ${slot.time} • ${value} bookings`}
-                              ></div>
-                            );
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-neutral-400 font-bold uppercase tracking-wide">
-                    No slots configured yet.
-                  </p>
-                )}
-              </div>
-
-              <div className="bg-white p-6 rounded-lg border-2 border-neutral-200">
-                <div className="flex justify-between items-center mb-5">
-                  <h4 className="font-black uppercase text-sm">
-                    Slot Configuration
-                  </h4>
-
-                  <button
-                    onClick={() => setShowAddSlotModal(true)}
-                    className="px-4 py-2 bg-neutral-900 text-white rounded-md text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-colors"
-                  >
-                    + Add Slot
-                  </button>
-                </div>
-
-                {facSlots.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {facSlots.map(slot => {
-                      const demand = analyzeDemand(slot.id);
-                      const bookingCount = getSlotBookingCount(slot.id);
-                      const projectedMultiplier = calculateSurgeMultiplier(
-                        demand.demandScore
-                      );
-                      const projectedPercent = Math.round(
-                        (projectedMultiplier - 1) * 100
-                      );
-
-                      return (
-                        <div
-                          key={slot.id}
-                          className="p-4 rounded-lg border border-neutral-200 bg-neutral-50"
-                        >
-                          <div className="flex justify-between items-start gap-4">
-                            <div>
-                              <p className="font-black uppercase text-sm">
-                                {slot.time}
-                              </p>
-                              <p className="text-[10px] text-neutral-500 font-black uppercase tracking-wide mt-1">
-                                Base Price: ₹{slot.price}
-                              </p>
-                              <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-wide mt-2">
-                                Bookings: {bookingCount} • Demand: {demand.demandScore}%
-                              </p>
-                            </div>
-
-                            <div className="flex gap-2">
-
-<button
-  onClick={() => handleEditSlot(slot)}
-  className="px-3 py-2 rounded-md bg-neutral-200 text-neutral-800 text-[10px] font-black uppercase tracking-widest hover:bg-neutral-300"
->
-Edit
-</button>
-
-<button
-  onClick={() => deleteSlot(slot)}
-  className="px-3 py-2 rounded-md bg-red-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-red-700"
->
-Delete
-</button>
-
-{!slot.surgeEnabled ? (
-  <button
-    onClick={() => enableSurge(slot)}
-    className="px-3 py-2 rounded-md bg-neutral-900 text-white text-[10px] font-black uppercase tracking-widest hover:bg-orange-600"
-  >
-    Surge
-  </button>
-) : (
-  <button
-    onClick={() => disableSurge(slot)}
-    className="px-3 py-2 rounded-md bg-white text-red-600 border border-red-600 text-[10px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white"
-  >
-    Disable
-  </button>
-)}
-
-</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-neutral-400 font-bold uppercase tracking-wide">
-                    No slots configured yet.
-                  </p>
-                )}
-              </div>
-
-              <div className="bg-white rounded-lg border-2 border-neutral-200 overflow-hidden">
-                <div className="px-6 py-5 border-b border-neutral-100 flex justify-between items-center">
-                  <h4 className="font-black uppercase text-sm">
-                    Customer Bookings Audit
-                  </h4>
-                  <span className="text-[9px] font-mono text-neutral-300 uppercase tracking-widest">
-                    DB_RELATION • {selectedFac.id.toUpperCase()}
-                  </span>
-                </div>
-
-                {recentBookings.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                      <thead className="bg-neutral-50">
-                        <tr>
-                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">
-                            Date
-                          </th>
-                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">
-                            Time Slot
-                          </th>
-                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">
-                            User Reference
-                          </th>
-                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">
-                            Status
-                          </th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {recentBookings.map(booking => {
-                          const slot = facSlots.find(s => s.id === booking.slotId);
-
-                          return (
-                            <tr
-                              key={booking.id}
-                              className="border-t border-neutral-100"
-                            >
-                              <td className="px-6 py-4 text-sm font-black text-neutral-900">
-                                {booking.bookingDate}
-                              </td>
-                              <td className="px-6 py-4 text-sm text-neutral-500">
-                                {slot?.time || 'Unknown Slot'}
-                              </td>
-                              <td className="px-6 py-4 text-xs text-neutral-400 font-mono">
-                                {booking.userId}
-                              </td>
-                              <td className="px-6 py-4">
-                                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600">
-                                  ● {booking.status}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="px-6 py-10">
-                    <p className="text-sm text-neutral-400 font-bold uppercase tracking-wide">
-                      No recent bookings for this facility.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="bg-white p-10 rounded-lg border-2 border-neutral-200 text-center">
-              <p className="text-neutral-400 font-bold uppercase tracking-wide">
-                No facilities found for this owner.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {showAddSlotModal && selectedFac && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-neutral-900/80 backdrop-blur-sm"
-            onClick={() => {
-              setShowAddSlotModal(false);
-              resetSlotForm();
-            }}
-          ></div>
-
-          <div className="relative w-full max-w-md bg-white rounded-xl border-2 border-neutral-200 shadow-2xl p-6">
-            <div className="flex justify-between items-start gap-4 mb-6">
-              <div>
-                <h3 className="text-2xl font-black uppercase italic tracking-tight">
-                  Add New Slot
-                </h3>
-                <p className="text-xs text-neutral-500 font-bold uppercase tracking-widest mt-2">
-                  {selectedFac.name}
-                </p>
-              </div>
-
-              <button
-                onClick={() => {
-                  setShowAddSlotModal(false);
-                  resetSlotForm();
-                }}
-                className="w-9 h-9 rounded-full bg-neutral-900 text-white hover:bg-orange-600 transition-colors flex items-center justify-center"
-              >
-                <i className="fas fa-times text-xs"></i>
-              </button>
-            </div>
-
-            <form onSubmit={handleAddSlot} className="space-y-5">
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-2">
-                  Start Time
-                </label>
-                <select
-                  value={slotForm.startTime}
-                  onChange={(e) =>
-                    setSlotForm(prev => ({ ...prev, startTime: e.target.value }))
-                  }
-                  className="w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500 bg-white"
-                >
-                  <option>06:00 AM</option>
-                  <option>07:00 AM</option>
-                  <option>08:00 AM</option>
-                  <option>09:00 AM</option>
-                  <option>05:00 PM</option>
-                  <option>06:00 PM</option>
-                  <option>07:00 PM</option>
-                  <option>08:00 PM</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-2">
-                  End Time
-                </label>
-                <select
-                  value={slotForm.endTime}
-                  onChange={(e) =>
-                    setSlotForm(prev => ({ ...prev, endTime: e.target.value }))
-                  }
-                  className="w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500 bg-white"
-                >
-                  <option>07:00 AM</option>
-                  <option>08:00 AM</option>
-                  <option>09:00 AM</option>
-                  <option>10:00 AM</option>
-                  <option>06:00 PM</option>
-                  <option>07:00 PM</option>
-                  <option>08:00 PM</option>
-                  <option>09:00 PM</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-2">
-                  Base Price
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={slotForm.price}
-                  onChange={(e) =>
-                    setSlotForm(prev => ({ ...prev, price: e.target.value }))
-                  }
-                  placeholder="Enter slot price"
-                  className="w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddSlotModal(false);
-                    resetSlotForm();
-                  }}
-                  className="flex-1 px-4 py-3 rounded-lg bg-neutral-100 text-neutral-700 font-black uppercase tracking-widest text-xs hover:bg-neutral-200 transition-colors"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-3 rounded-lg bg-neutral-900 text-white font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-colors"
-                >
-                  Save Slot
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showNewVenueModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-neutral-900/80 backdrop-blur-sm"
-            onClick={() => {
-              setShowNewVenueModal(false);
-              resetVenueForm();
-            }}
-          ></div>
-
-          <div className="relative w-full max-w-lg bg-white rounded-xl border-2 border-neutral-200 shadow-2xl p-6">
-            <div className="flex justify-between items-start gap-4 mb-6">
-              <div>
-                <h3 className="text-2xl font-black uppercase italic tracking-tight">
-                  Add New Venue
-                </h3>
-                <p className="text-xs text-neutral-500 font-bold uppercase tracking-widest mt-2">
-                  Register a new facility under your ownership
-                </p>
-              </div>
-
-              <button
-                onClick={() => {
-                  setShowNewVenueModal(false);
-                  resetVenueForm();
-                }}
-                className="w-9 h-9 rounded-full bg-neutral-900 text-white hover:bg-orange-600 transition-colors flex items-center justify-center"
-              >
-                <i className="fas fa-times text-xs"></i>
-              </button>
-            </div>
-
-            <form onSubmit={handleAddVenue} className="space-y-5">
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-2">
-                  Venue Name
-                </label>
-                <input
-                  type="text"
-                  value={venueForm.name}
-                  onChange={(e) =>
-                    setVenueForm(prev => ({ ...prev, name: e.target.value }))
-                  }
-                  placeholder="Enter facility name"
-                  className="w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-2">
-                    Sport
-                  </label>
-                  <select
-                    value={venueForm.sport}
-                    onChange={(e) =>
-                      setVenueForm(prev => ({ ...prev, sport: e.target.value }))
-                    }
-                    className="w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500 bg-white"
-                  >
-                    <option>Football</option>
-                    <option>Badminton</option>
-                    <option>Cricket</option>
-                    <option>Tennis</option>
-                    <option>Basketball</option>
-                    <option>Swimming</option>
-                    <option>Gym</option>
-                    <option>Yoga</option>
-                    <option>Padel</option>
-                    <option>Table Tennis</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-2">
-                    Base Price
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={venueForm.basePrice}
-                    onChange={(e) =>
-                      setVenueForm(prev => ({ ...prev, basePrice: e.target.value }))
-                    }
-                    placeholder="₹"
-                    className="w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-2">
-                  Location
-                </label>
-                <input
-                  type="text"
-                  value={venueForm.location}
-                  onChange={(e) =>
-                    setVenueForm(prev => ({ ...prev, location: e.target.value }))
-                  }
-                  placeholder="Eg. Kowdiar, Trivandrum"
-                  className="w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-2">
-                  Image URL (optional)
-                </label>
-                <input
-                  type="text"
-                  value={venueForm.imageUrl}
-                  onChange={(e) =>
-                    setVenueForm(prev => ({ ...prev, imageUrl: e.target.value }))
-                  }
-                  placeholder="Paste image URL or leave empty"
-                  className="w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowNewVenueModal(false);
-                    resetVenueForm();
-                  }}
-                  className="flex-1 px-4 py-3 rounded-lg bg-neutral-100 text-neutral-700 font-black uppercase tracking-widest text-xs hover:bg-neutral-200 transition-colors"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-3 rounded-lg bg-neutral-900 text-white font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-colors"
-                >
-                  Save Venue
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showEditSlotModal && editingSlot && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-    
-    <div
-      className="absolute inset-0 bg-neutral-900/80"
-      onClick={() => setShowEditSlotModal(false)}
-    ></div>
-
-    <div className="relative w-full max-w-md bg-white rounded-xl border-2 p-6">
-
-      <h3 className="text-2xl font-black uppercase italic mb-6">
-        Edit Slot
-      </h3>
-
-      <form onSubmit={handleSaveSlotEdit} className="space-y-5">
-
-        <div>
-          <label className="text-xs font-black uppercase">
-            Start Time
-          </label>
-          <input
-            value={slotForm.startTime}
-            onChange={e =>
-              setSlotForm(prev => ({
-                ...prev,
-                startTime: e.target.value
-              }))
-            }
-            className="w-full border p-3 rounded"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-black uppercase">
-            End Time
-          </label>
-          <input
-            value={slotForm.endTime}
-            onChange={e =>
-              setSlotForm(prev => ({
-                ...prev,
-                endTime: e.target.value
-              }))
-            }
-            className="w-full border p-3 rounded"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-black uppercase">
-            Price
-          </label>
-          <input
-            type="number"
-            value={slotForm.price}
-            onChange={e =>
-              setSlotForm(prev => ({
-                ...prev,
-                price: e.target.value
-              }))
-            }
-            className="w-full border p-3 rounded"
-          />
-        </div>
-
-        <button
-          type="submit"
-          className="w-full bg-neutral-900 text-white py-3 rounded font-black uppercase hover:bg-orange-600"
-        >
-          Save Changes
-        </button>
-
-      </form>
-    </div>
-  </div>
-)}
-    </div>
-  );
-};
-
-export default OwnerDashboard;
-
-*/
-
-
-import React, { useState, useEffect } from 'react';
-import { facilityService } from '../services/facilityService';
-import { getAllBookings } from '../services/bookingService';
-import { Facility, Slot, User, Booking, FacilityAmenity } from '../types';
-
-interface OwnerDashboardProps {
-  user: User;
-}
-
-const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user }) => {
-  const [myFacilities, setMyFacilities] = useState<Facility[]>([]);
-  const [selectedFac, setSelectedFac] = useState<Facility | null>(null);
-  const [facSlots, setFacSlots] = useState<Slot[]>([]);
-  const [allBookings, setAllBookings] = useState<Booking[]>([]);
-  
-
-  const [amenityForm, setAmenityForm] = useState({
-    name: '',
-    type: 'fnb' as FacilityAmenity['type'],
-    price: '',
-    unit: ''
-  });
-  
-  const [showAmenityModal, setShowAmenityModal] = useState(false);
-  const [showSlotModal, setShowSlotModal] = useState(false);
-  const [showVenueModal, setShowVenueModal] = useState(false);
-
-  const [slotForm, setSlotForm] = useState({
-    time: '',
-    price: ''
-  });
-
-  const [venueForm, setVenueForm] = useState({
-    name: '',
-    sport: '',
-    location: '',
-    city: user.city || 'Chennai',
-    basePrice: '',
-    imageUrl: ''
-  });
-
-  useEffect(() => {
-    refreshData();
-  }, [user.id]);
-
-  const refreshData = () => {
-    const facilities = facilityService
-      .getAllFacilities(true)
-      .filter(f => f.ownerId === user.id);
-
-    setMyFacilities(facilities);
-    setAllBookings(getAllBookings());
-
-    const currentSelected =
-      selectedFac
-        ? facilities.find(f => f.id === selectedFac.id) || null
-        : facilities[0] || null;
-
-    setSelectedFac(currentSelected);
-
-    if (currentSelected) {
-      setFacSlots(facilityService.getSlotsByFacility(currentSelected.id));
-    } else {
-      setFacSlots([]);
-    }
-  };
-
-  const resetAmenityForm = () => {
-    setAmenityForm({
-      name: '',
-      type: 'fnb',
-      price: '',
-      unit: ''
-    });
-  };
-
-  const resetSlotForm = () => {
-  setSlotForm({
-    time: '',
-    price: ''
-  });
-};
-
-const resetVenueForm = () => {
-  setVenueForm({
-    name: '',
-    sport: '',
-    location: '',
-    city: user.city || 'Chennai',
-    basePrice: '',
-    imageUrl: ''
-  });
-};
-
-  const handleAddAmenity = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedFac) return;
-
-    if (!amenityForm.name.trim() || !amenityForm.price.trim()) {
-      alert('Please fill amenity name and price.');
-      return;
-    }
-
-    facilityService.addAmenityToFacility(selectedFac.id, {
-      name: amenityForm.name.trim(),
-      type: amenityForm.type,
-      price: Number(amenityForm.price),
-      unit: amenityForm.unit.trim(),
-      available: true
-    });
-
-    resetAmenityForm();
-    setShowAmenityModal(false);
-    refreshData();
-  };
-
-  const handleToggleAmenityAvailability = (amenity: FacilityAmenity) => {
-    if (!selectedFac) return;
-
-    facilityService.updateAmenityInFacility(selectedFac.id, amenity.id, {
-      available: !amenity.available
-    });
-
-    refreshData();
-  };
-
-  const handleDeleteAmenity = (amenityId: string) => {
-    if (!selectedFac) return;
-    if (!confirm('Delete this amenity?')) return;
-
-    facilityService.deleteAmenityFromFacility(selectedFac.id, amenityId);
-    refreshData();
-  };
-
-  const handleAddSlot = (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!selectedFac) return;
-
-  if (!slotForm.time.trim() || !slotForm.price.trim()) {
-    alert('Please fill slot time and price.');
-    return;
-  }
-
-  facilityService.addSlot({
-    facilityId: selectedFac.id,
-    time: slotForm.time.trim(),
-    price: Number(slotForm.price),
-    surgeEnabled: false,
-    surgeMultiplier: 1
-  });
-
-  resetSlotForm();
-  setShowSlotModal(false);
-  refreshData();
-};
-
-const handleAddVenue = (e: React.FormEvent) => {
-  e.preventDefault();
-
-  if (
-    !venueForm.name.trim() ||
-    !venueForm.sport.trim() ||
-    !venueForm.location.trim() ||
-    !venueForm.city.trim() ||
-    !venueForm.basePrice.trim()
-  ) {
-    alert('Please fill all required venue details.');
-    return;
-  }
-
-  facilityService.addFacility({
-    name: venueForm.name.trim(),
-    sport: venueForm.sport.trim(),
-    location: venueForm.location.trim(),
-    city: venueForm.city.trim(),
-    basePrice: Number(venueForm.basePrice),
-    imageUrl: venueForm.imageUrl.trim(),
-    ownerId: user.id,
-    status: 'approved'
-  });
-
-  resetVenueForm();
-  setShowVenueModal(false);
-  refreshData();
-};
-
-  const analyzeDemand = (slotId: string) => {
-    const confirmed = allBookings.filter(
-      b => b.slotId === slotId && b.status === "confirmed"
-    );
-
-    const uniqueDays = [...new Set(confirmed.map(b => b.bookingDate))].sort(
-      (a, b) => new Date(b).getTime() - new Date(a).getTime()
-    );
-
-    if (uniqueDays.length === 0) {
-      return {
-        demandScore: 0,
-        streak: 0,
-        reason: "No booking activity"
-      };
-    }
-
-    let streak = 1;
-
-    for (let i = 0; i < uniqueDays.length - 1; i++) {
-      const current = new Date(uniqueDays[i]);
-      const next = new Date(uniqueDays[i + 1]);
-
-      const diff =
-        (current.getTime() - next.getTime()) / (1000 * 60 * 60 * 24);
-
-      if (diff === 1) streak++;
-      else break;
-    }
-
-    const demandScore = Math.min(100, streak * 20);
-
-    let reason = "Stable demand";
-    if (streak >= 5) reason = `${streak}-day booking streak`;
-    else if (streak >= 3) reason = `Rising trend (${streak} days)`;
-
-    return { demandScore, streak, reason };
-  };
-
-  const calculateSurgeMultiplier = (demandScore: number) => {
-    const baseSurge = 0.05;
-    const surgeRange = 0.15;
-    const surgePercent = baseSurge + (demandScore / 100) * surgeRange;
-    return 1 + surgePercent;
-  };
-
-  const enableSurge = (slot: Slot) => {
-    const demand = analyzeDemand(slot.id);
-    const multiplier = calculateSurgeMultiplier(demand.demandScore);
-
-    facilityService.updateSlot(slot.id, {
-      price: Math.round(slot.price * multiplier),
-      surgeEnabled: true,
-      surgeMultiplier: multiplier
-    });
-
-    refreshData();
-  };
-
-  const disableSurge = (slot: Slot) => {
-    const original = Math.round(slot.price / (slot.surgeMultiplier || 1));
-
-    facilityService.updateSlot(slot.id, {
-      price: original,
-      surgeEnabled: false,
-      surgeMultiplier: 1
-    });
-
-    refreshData();
-  };
-
-  const facilitySlotIds = facSlots.map(s => s.id);
-
-  const confirmedBookings = allBookings.filter(
-    b => facilitySlotIds.includes(b.slotId) && b.status === "confirmed"
-  );
-
-  const totalRevenue = confirmedBookings.reduce((sum, b) => {
-    return sum + (b.finalPrice || 0);
-  }, 0);
-
-  const totalBookingsCount = confirmedBookings.length;
-  const activeSlotsCount = facSlots.length;
-  const availableAmenitiesCount = selectedFac?.amenityOptions?.filter(
-    a => a.available !== false
-  ).length || 0;
-
-  const selectedFacilityBookings = confirmedBookings
-    .slice()
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-
-    const aiRevenueSuggestions = facSlots.map(slot => {
-  const demand = analyzeDemand(slot.id);
-  const slotBookings = confirmedBookings.filter(b => b.slotId === slot.id);
-  const occupancy = facSlots.length > 0 ? Math.min(100, slotBookings.length * 25) : 0;
-
-  if (occupancy < 40) {
-    return {
-      slotId: slot.id,
-      time: slot.time,
-      status: 'UNDERPERFORMING',
-      action: `RUN 15% PROMO TO INCREASE OCCUPANCY FROM ${occupancy.toFixed(2)}%`,
-      impact: '+15% REVENUE IMPACT'
-    };
-  }
-
-  if (demand.demandScore >= 60) {
-    return {
-      slotId: slot.id,
-      time: slot.time,
-      status: 'HIGH DEMAND',
-      action: 'CONSIDER PREMIUM PRICING FOR THIS SLOT',
-      impact: '+8% REVENUE IMPACT'
-    };
-  }
-
-  return {
-    slotId: slot.id,
-    time: slot.time,
-    status: 'STABLE',
-    action: 'MAINTAIN CURRENT PRICING AND MONITOR BOOKING FLOW',
-    impact: '+4% REVENUE IMPACT'
-  };
-});
-
-const weekDays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-
-const getDayLabel = (dateString: string) => {
-  const day = new Date(dateString).getDay();
-  const mapped = (day + 6) % 7;
-  return weekDays[mapped];
-};
-
-const heatmapSlots = facSlots.slice(0, 2);
-
-const heatmapRows = weekDays.map(day => ({
-  day,
-  cells: heatmapSlots.map(slot => {
-    const count = confirmedBookings.filter(
-      b => b.slotId === slot.id && getDayLabel(b.bookingDate) === day
-    ).length;
-
-    return count;
-  })
-}));
-
-  return (
-    <div className="max-w-7xl mx-auto px-4 py-8 font-sans">
-
-    <div className="flex items-end justify-between gap-6 mb-12 border-b-2 border-neutral-900 pb-6">
-  <div>
-    <h2 className="text-5xl font-black uppercase italic tracking-tighter">
-      Owner Dashboard
-    </h2>
-    <p className="text-neutral-500 font-medium mt-2 tracking-wide uppercase text-xs">
-      Manage your facilities and pricing.
-    </p>
-  </div>
-
-  <button
-    onClick={() => setShowVenueModal(true)}
-    className="px-5 py-3 rounded-lg bg-neutral-900 text-white text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-colors"
-  >
-    + New Venue
-  </button>
-</div>
-
-      <div className="grid grid-cols-4 gap-8">
-        {/* Sidebar */}
-        <div className="col-span-1 space-y-4">
-          <div className="flex items-center justify-between mb-2">
-    <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
-      Inventory
-    </p>
-
-    <div className="flex items-center gap-2">
-      <span className="px-2 py-1 rounded-sm bg-neutral-100 text-neutral-500 text-[8px] font-black uppercase tracking-widest">
-        {myFacilities.length} total
-      </span>
-      <span className="px-2 py-1 rounded-sm bg-emerald-50 text-emerald-700 border border-emerald-100 text-[8px] font-black uppercase tracking-widest">
-        Verified Ownership
-      </span>
-    </div>
-  </div>
-          {myFacilities.map(f => (
-            <div
-              key={f.id}
-              onClick={() => {
-                setSelectedFac(f);
-                setFacSlots(facilityService.getSlotsByFacility(f.id));
-              }}
-              className={`p-4 rounded-lg border-2 cursor-pointer ${
-                selectedFac?.id === f.id
-                  ? 'bg-neutral-900 text-white border-neutral-900'
-                  : 'bg-white border-neutral-200'
-              }`}
-            >
-              <p className="font-bold uppercase">{f.name}</p>
-              <p className="text-xs text-neutral-400">
-                {f.sport} • {f.location}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* Right Panel */}
-        <div className="col-span-3 space-y-8">
-          {selectedFac && (
-            <>
-              {/* KPI Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white p-6 rounded-lg border-2">
-                  <p className="text-xs text-neutral-400 uppercase tracking-widest font-black">
-                    Estimated Revenue
-                  </p>
-                  <p className="text-3xl font-black mt-2">
-                    ₹{totalRevenue.toFixed(2)}
-                  </p>
-                </div>
-
-                <div className="bg-white p-6 rounded-lg border-2">
-                  <p className="text-xs text-neutral-400 uppercase tracking-widest font-black">
-                    Active Slots
-                  </p>
-                  <p className="text-3xl font-black mt-2">
-                    {activeSlotsCount}
-                  </p>
-                </div>
-
-                <div className="bg-white p-6 rounded-lg border-2">
-                  <p className="text-xs text-neutral-400 uppercase tracking-widest font-black">
-                    Total Bookings
-                  </p>
-                  <p className="text-3xl font-black mt-2 text-orange-600">
-                    {totalBookingsCount}
-                  </p>
-                </div>
-
-                <div className="bg-white p-6 rounded-lg border-2">
-                  <p className="text-xs text-neutral-400 uppercase tracking-widest font-black">
-                    Amenities
-                  </p>
-                  <p className="text-3xl font-black mt-2">
-                    {availableAmenitiesCount}
-                  </p>
-                </div>
-              </div>
-
-{/* ai revenue intelligence */}
-
-
-            <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-5 text-white">
-  <div className="flex items-center gap-3 mb-5">
-    <div className="w-8 h-8 rounded-sm bg-orange-600 flex items-center justify-center">
-      <i className="fas fa-brain text-white text-sm"></i>
-    </div>
-    <div>
-      <h4 className="font-black uppercase italic tracking-tight">
-        AI Revenue Intelligence
-      </h4>
-      <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 mt-1">
-        Real-time optimization suggestions
-      </p>
-    </div>
-  </div>
-
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-    {aiRevenueSuggestions.slice(0, 2).map(item => (
+import React, { useEffect, useId, useReducer, useRef, useState } from 'react';
+import { User } from '../types';
+import {
+  ownerFacilityRepository,
+  toOwnerError,
+  describeFacilityStatus,
+  OwnerError,
+  OwnerFacility,
+  OwnerSlot,
+  FacilityInput,
+  SlotInput,
+  FACILITY_LIMITS
+} from '../services/ownerFacilityRepository';
+import { effectiveStatus, UserBooking } from '../services/bookingRepository';
+import { createSingleFlight } from '../services/singleFlight';
+import { createActionSequence } from '../services/actionNotice';
+import {
+  DayState,
+  HoursDraft,
+  hoursReducer,
+  isDirty,
+  saveDay
+} from '../services/operatingHoursDraft';
+
+/**
+ * Owner console. Everything here is read from, and written to, the
+ * database through ownerFacilityRepository. Row Level Security is the
+ * authorization authority: this component only decides what to show.
+ *
+ * Deliberately not offered (the database or platform does not support
+ * it for owners yet): approving or changing a venue's status, deleting
+ * a venue or a slot, reassigning ownership, and photo uploads (there is
+ * no storage bucket).
+ */
+
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+const inputClass =
+  'w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500 transition-colors disabled:bg-neutral-100';
+const labelClass =
+  'block text-xs font-black text-neutral-400 uppercase tracking-widest mb-1';
+const primaryButton =
+  'px-6 py-3 bg-neutral-900 text-white text-xs font-black uppercase tracking-widest rounded-lg hover:bg-orange-600 transition-all disabled:bg-neutral-300 disabled:text-neutral-500 disabled:cursor-not-allowed';
+const secondaryButton =
+  'px-4 py-2 border-2 border-neutral-300 text-neutral-700 text-[10px] font-black uppercase tracking-widest rounded-md hover:border-neutral-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed';
+
+type Notice = { type: 'success' | 'error'; text: string } | null;
+
+const NoticeBox: React.FC<{ notice: Notice }> = ({ notice }) => (
+  <div aria-live="polite">
+    {notice && (
       <div
-        key={item.slotId}
-        className="border border-neutral-700 rounded-md p-4 bg-neutral-800/60"
+        role={notice.type === 'error' ? 'alert' : 'status'}
+        className={`mb-4 p-3 border text-xs font-bold ${
+          notice.type === 'error'
+            ? 'bg-red-50 border-red-200 text-red-700'
+            : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+        }`}
       >
-        <div className="flex justify-between items-start gap-3 mb-3">
-          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
-            {item.time}
-          </p>
-
-          <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-sm ${
-            item.status === 'UNDERPERFORMING'
-              ? 'bg-red-900/40 text-red-300'
-              : item.status === 'HIGH DEMAND'
-              ? 'bg-orange-900/40 text-orange-300'
-              : 'bg-neutral-700 text-neutral-200'
-          }`}>
-            {item.status}
-          </span>
-        </div>
-
-        <p className="text-xs font-black uppercase leading-snug">
-          {item.action}
-        </p>
-
-        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400 mt-3">
-          ↗ {item.impact}
-        </p>
+        {notice.text}
       </div>
-    ))}
+    )}
   </div>
-</div>
+);
 
+const Field: React.FC<{
+  label: string;
+  error?: string;
+  hint?: string;
+  children: (props: { id: string; 'aria-describedby'?: string; 'aria-invalid'?: boolean }) => React.ReactNode;
+}> = ({ label, error, hint, children }) => {
+  const id = useId();
+  const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
 
-{/*weeklu occupanycy*/}
-
-
-    <div className="bg-white p-6 rounded-lg border-2">
-  <h4 className="font-black uppercase mb-6">
-    Weekly Occupancy Heatmap
-  </h4>
-
-  {heatmapSlots.length > 0 ? (
-    <div className="space-y-3">
-      <div className="grid grid-cols-[60px_repeat(2,minmax(0,1fr))] gap-2 items-center">
-        <div></div>
-        {heatmapSlots.map(slot => (
-          <div
-            key={slot.id}
-            className="text-center text-[10px] font-black uppercase tracking-widest text-neutral-400"
-          >
-            {slot.time}
-          </div>
-        ))}
-      </div>
-
-      {heatmapRows.map(row => (
-        <div
-          key={row.day}
-          className="grid grid-cols-[60px_repeat(2,minmax(0,1fr))] gap-2 items-center"
-        >
-          <div className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
-            {row.day}
-          </div>
-
-          {row.cells.map((count, idx) => (
-            <div
-              key={`${row.day}-${idx}`}
-              className={`h-8 rounded-sm ${
-                count >= 3
-                  ? 'bg-neutral-900'
-                  : count >= 2
-                  ? 'bg-neutral-500'
-                  : count >= 1
-                  ? 'bg-neutral-200'
-                  : 'bg-neutral-100'
-              }`}
-            ></div>
-          ))}
-        </div>
-      ))}
+  return (
+    <div>
+      <label htmlFor={id} className={labelClass}>
+        {label}
+      </label>
+      {children({
+        id,
+        'aria-describedby': describedBy,
+        'aria-invalid': error ? true : undefined
+      })}
+      {error ? (
+        <p id={`${id}-error`} className="mt-1 text-xs font-bold text-red-600">
+          {error}
+        </p>
+      ) : hint ? (
+        <p id={`${id}-hint`} className="mt-1 text-[11px] text-neutral-400">
+          {hint}
+        </p>
+      ) : null}
     </div>
-  ) : (
-    <div className="text-center py-8 border-2 border-dashed border-neutral-200 rounded-lg">
-      <p className="text-neutral-400 font-bold uppercase text-xs tracking-widest">
-        No slots available for heatmap
-      </p>
-    </div>
-  )}
-</div>
+  );
+};
 
-              {/* Surge Pricing */}
-              <div className="bg-white p-6 rounded-lg border-2">
-                <h4 className="font-black uppercase mb-6">
-                  Adaptive Surge Pricing
-                </h4>
-
-                <div className="grid grid-cols-2 gap-4">
-                  {facSlots.map(slot => {
-                    const demand = analyzeDemand(slot.id);
-                    const projectedMultiplier =
-                      calculateSurgeMultiplier(demand.demandScore);
-
-                    const projectedPercent =
-                      Math.round((projectedMultiplier - 1) * 100);
-
-                    return (
-                      <div
-                        key={slot.id}
-                        className="p-4 rounded-lg border-2 bg-neutral-50"
-                      >
-                        <p className="font-black uppercase">{slot.time}</p>
-
-                        <p className="text-lg mt-1">₹{slot.price}</p>
-
-                        <p className="text-[9px] mt-2 uppercase font-bold text-neutral-400">
-                          Demand Score: {demand.demandScore}%
-                        </p>
-
-                        <p className="text-[9px] text-neutral-500">
-                          {demand.reason}
-                        </p>
-
-                        {!slot.surgeEnabled ? (
-                          <>
-                            <p className="text-[10px] text-orange-600 font-black uppercase mt-3">
-                              Suggested Surge: +{projectedPercent}%
-                            </p>
-
-                            <button
-                              onClick={() => enableSurge(slot)}
-                              className="mt-3 px-5 py-2 rounded-xl bg-neutral-900 text-white text-[10px] font-black uppercase tracking-widest border-2 border-neutral-900 hover:bg-orange-600 hover:border-orange-700 transition-all duration-150 active:scale-95"
-                            >
-                              Enable Surge
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => disableSurge(slot)}
-                            className="mt-3 px-5 py-2 rounded-xl bg-white text-red-600 text-[10px] font-black uppercase tracking-widest border-2 border-red-600 hover:bg-red-600 hover:text-white transition-all duration-150 active:scale-95"
-                          >
-                            Disable Surge
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-
-
-<div className="bg-white p-6 rounded-lg border-2">
-  <div className="flex justify-between items-center mb-6">
-    <h4 className="font-black uppercase">
-      Slot Configuration
-    </h4>
-
-    <button
-      onClick={() => setShowSlotModal(true)}
-      className="px-4 py-2 rounded-md bg-neutral-900 text-white text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-colors"
-    >
-      + Add Slot
+const RetryBox: React.FC<{ message: string; onRetry: () => void }> = ({ message, onRetry }) => (
+  <div role="alert" className="p-4 bg-red-50 border border-red-200">
+    <p className="text-xs font-bold text-red-700">{message}</p>
+    <button onClick={onRetry} className={`${secondaryButton} mt-3`}>
+      Retry
     </button>
   </div>
+);
 
-  {facSlots.length > 0 ? (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {facSlots.map(slot => (
-        <div
-          key={slot.id}
-          className="p-4 rounded-lg border border-neutral-200 bg-neutral-50"
+const StatusBadge: React.FC<{ status: OwnerFacility['status'] }> = ({ status }) => {
+  const { label } = describeFacilityStatus(status);
+  const color =
+    status === 'active'
+      ? 'bg-emerald-100 text-emerald-700'
+      : status === 'pending'
+      ? 'bg-yellow-100 text-yellow-800'
+      : 'bg-red-100 text-red-700';
+
+  return (
+    <span
+      className={`px-2 py-0.5 rounded-sm text-[9px] font-black uppercase tracking-wider ${color}`}
+    >
+      {label}
+    </span>
+  );
+};
+
+// -- Facility form (create and edit) -------------------------------------
+
+const emptyInput: FacilityInput = {
+  name: '',
+  description: '',
+  sport: '',
+  address: '',
+  city: '',
+  capacity: '',
+  basePrice: ''
+};
+
+const toInput = (f: OwnerFacility): FacilityInput => ({
+  name: f.name,
+  description: f.description ?? '',
+  sport: f.sport,
+  address: f.address,
+  city: f.city,
+  capacity: f.capacity === null ? '' : String(f.capacity),
+  basePrice: String(f.basePrice)
+});
+
+const FacilityForm: React.FC<{
+  initial: FacilityInput;
+  submitLabel: string;
+  busyLabel: string;
+  onSubmit: (input: FacilityInput) => Promise<void>;
+  onCancel?: () => void;
+}> = ({ initial, submitLabel, busyLabel, onSubmit, onCancel }) => {
+  const [values, setValues] = useState<FacilityInput>(initial);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState<Notice>(null);
+  const guard = useRef(createSingleFlight());
+  const [busy, setBusy] = useState(false);
+
+  const set = (key: keyof FacilityInput) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => setValues(v => ({ ...v, [key]: e.target.value }));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (guard.current.busy) return;
+
+    await guard.current.run(async () => {
+      setBusy(true);
+      setNotice(null);
+      setFieldErrors({});
+
+      try {
+        await onSubmit(values);
+      } catch (err) {
+        const failure = err instanceof OwnerError ? err : toOwnerError(err);
+        setFieldErrors(failure.fields);
+        setNotice({ type: 'error', text: failure.message });
+      } finally {
+        setBusy(false);
+      }
+    });
+  };
+
+  return (
+    <form onSubmit={submit} noValidate className="space-y-4">
+      <NoticeBox notice={notice} />
+
+      <Field label="Venue name" error={fieldErrors.name}>
+        {p => (
+          <input {...p} className={inputClass} value={values.name} onChange={set('name')}
+            maxLength={FACILITY_LIMITS.name.max} autoComplete="off" disabled={busy} />
+        )}
+      </Field>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Sport" error={fieldErrors.sport}>
+          {p => (
+            <input {...p} className={inputClass} value={values.sport} onChange={set('sport')}
+              maxLength={FACILITY_LIMITS.sport.max} placeholder="e.g. Padel" disabled={busy} />
+          )}
+        </Field>
+        <Field label="City" error={fieldErrors.city}>
+          {p => (
+            <input {...p} className={inputClass} value={values.city} onChange={set('city')}
+              maxLength={FACILITY_LIMITS.city.max} autoComplete="address-level2" disabled={busy} />
+          )}
+        </Field>
+      </div>
+
+      <Field label="Address" error={fieldErrors.address}>
+        {p => (
+          <input {...p} className={inputClass} value={values.address} onChange={set('address')}
+            maxLength={FACILITY_LIMITS.address.max} autoComplete="street-address" disabled={busy} />
+        )}
+      </Field>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field
+          label="Base price (₹)"
+          error={fieldErrors.basePrice}
+          hint="Default price for the venue. Each slot has its own price."
         >
-          <div className="flex justify-between items-start gap-3">
-            <div>
-              <p className="font-black uppercase text-sm text-neutral-900">
-                {slot.time}
-              </p>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 mt-1">
-                Base Price: ₹{slot.price}
-              </p>
-            </div>
+          {p => (
+            <input {...p} className={inputClass} value={values.basePrice} onChange={set('basePrice')}
+              inputMode="decimal" disabled={busy} />
+          )}
+        </Field>
+        <Field label="Capacity (optional)" error={fieldErrors.capacity}>
+          {p => (
+            <input {...p} className={inputClass} value={values.capacity} onChange={set('capacity')}
+              inputMode="numeric" disabled={busy} />
+          )}
+        </Field>
+      </div>
 
-            <div className="flex items-center gap-2 text-neutral-300">
-              <i className="fas fa-pen-to-square text-xs"></i>
-              <i className="fas fa-trash text-xs"></i>
-            </div>
-          </div>
-        </div>
-      ))}
+      <Field label="Description (optional)" error={fieldErrors.description}>
+        {p => (
+          <textarea {...p} rows={4} className={inputClass} value={values.description}
+            onChange={set('description')} maxLength={FACILITY_LIMITS.description.max} disabled={busy} />
+        )}
+      </Field>
+
+      <div className="flex flex-wrap gap-3 pt-2">
+        <button type="submit" disabled={busy} aria-busy={busy} className={primaryButton}>
+          {busy ? busyLabel : submitLabel}
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel} disabled={busy} className={secondaryButton}>
+            Cancel
+          </button>
+        )}
+      </div>
+    </form>
+  );
+};
+
+// -- Operating hours ------------------------------------------------------
+
+const HoursPanel: React.FC<{ facilityId: string }> = ({ facilityId }) => {
+  const [load, setLoad] = useState<
+    | { phase: 'loading' }
+    | { phase: 'error'; message: string }
+    | { phase: 'ready' }
+  >({ phase: 'loading' });
+  // Saved baseline and drafts for all seven days (see
+  // services/operatingHoursDraft). A save moves only its own day's
+  // baseline; it never reloads the week or touches another draft.
+  const [hours, dispatch] = useReducer(hoursReducer, { days: [], savingDay: null });
+  const [reloadKey, setReloadKey] = useState(0);
+  const [notice, setNotice] = useState<Notice>(null);
+  const guard = useRef(createSingleFlight());
+  // A response that arrives after the owner has moved to another venue
+  // must not be applied to that venue's form.
+  const activeFacility = useRef(facilityId);
+
+  useEffect(() => {
+    let cancelled = false;
+    activeFacility.current = facilityId;
+    setLoad({ phase: 'loading' });
+    setNotice(null);
+
+    ownerFacilityRepository
+      .loadOperatingHours(facilityId)
+      .then(week => {
+        if (cancelled) return;
+        dispatch({ type: 'loaded', week });
+        setLoad({ phase: 'ready' });
+      })
+      .catch(err => {
+        if (!cancelled) setLoad({ phase: 'error', message: toOwnerError(err).message });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [facilityId, reloadKey]);
+
+  const save = (dayOfWeek: number) =>
+    saveDay({
+      state: hours,
+      dayOfWeek,
+      guard: guard.current,
+      dispatch,
+      persist: (day, rowId) =>
+        ownerFacilityRepository.saveOperatingDay(facilityId, day, rowId),
+      describeError: err => toOwnerError(err).message,
+      isActive: () => activeFacility.current === facilityId,
+      onStarted: () => setNotice(null),
+      onSaved: () =>
+        setNotice({ type: 'success', text: `${DAYS[dayOfWeek]} hours saved.` })
+    });
+
+  if (load.phase === 'loading') {
+    return <p className="text-xs font-bold uppercase text-neutral-400">Loading hours…</p>;
+  }
+  if (load.phase === 'error') {
+    return <RetryBox message={load.message} onRetry={() => setReloadKey(k => k + 1)} />;
+  }
+
+  return (
+    <div>
+      <p className="text-xs text-neutral-500 mb-4">
+        Players can only book slots that fall inside a day's opening hours. A day with no hours set
+        cannot be booked.
+      </p>
+      <NoticeBox notice={notice} />
+      <ul className="space-y-3">
+        {hours.days.map(day => (
+          <HoursRow
+            key={day.saved.dayOfWeek}
+            day={day}
+            saving={hours.savingDay === day.saved.dayOfWeek}
+            busy={hours.savingDay !== null}
+            onEdit={patch =>
+              dispatch({ type: 'edit', day: day.saved.dayOfWeek, patch })
+            }
+            onSave={() => save(day.saved.dayOfWeek)}
+          />
+        ))}
+      </ul>
     </div>
-  ) : (
-    <div className="text-center py-8 border-2 border-dashed border-neutral-200 rounded-lg">
-      <p className="text-neutral-400 font-bold uppercase text-xs tracking-widest">
-        No slots configured for this facility
+  );
+};
+
+const HoursRow: React.FC<{
+  day: DayState;
+  saving: boolean;
+  /** Some day's request is in flight: no second save may start. */
+  busy: boolean;
+  onEdit: (patch: Partial<HoursDraft>) => void;
+  onSave: () => void;
+}> = ({ day, saving, busy, onEdit, onSave }) => {
+  const baseId = useId();
+  const name = DAYS[day.saved.dayOfWeek];
+  const { draft, error } = day;
+  const errorId = `${baseId}-error`;
+  const describedBy = error ? errorId : undefined;
+
+  return (
+    <li className="p-4 bg-neutral-50 border-2 border-neutral-100 rounded-lg">
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="w-28">
+          <p className="text-xs font-black uppercase tracking-tight text-neutral-900">{name}</p>
+          <p className="text-[10px] font-bold uppercase text-neutral-400">
+            {isDirty(day) ? 'Unsaved changes' : day.saved.configured ? 'Saved' : 'Not set'}
+          </p>
+        </div>
+
+        <label className="flex items-center gap-2 text-xs font-bold text-neutral-600">
+          <input
+            type="checkbox"
+            checked={draft.isClosed}
+            onChange={e => onEdit({ isClosed: e.target.checked })}
+            aria-describedby={describedBy}
+          />
+          Closed
+        </label>
+
+        <div>
+          <label htmlFor={`${baseId}-open`} className={labelClass}>Opens</label>
+          <input id={`${baseId}-open`} type="time" className={inputClass} value={draft.opensAt}
+            onChange={e => onEdit({ opensAt: e.target.value })} disabled={draft.isClosed}
+            aria-invalid={error && !draft.isClosed ? true : undefined}
+            aria-describedby={describedBy} />
+        </div>
+        <div>
+          <label htmlFor={`${baseId}-close`} className={labelClass}>Closes</label>
+          <input id={`${baseId}-close`} type="time" className={inputClass} value={draft.closesAt}
+            onChange={e => onEdit({ closesAt: e.target.value })} disabled={draft.isClosed}
+            aria-invalid={error && !draft.isClosed ? true : undefined}
+            aria-describedby={describedBy} />
+        </div>
+
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={busy}
+          aria-busy={saving}
+          aria-label={`Save ${name} hours`}
+          className={secondaryButton}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+      {error && (
+        <p id={errorId} role="alert" className="mt-2 text-[11px] font-bold text-red-600">
+          {name}: {error}
+        </p>
+      )}
+    </li>
+  );
+};
+
+// -- Slots ----------------------------------------------------------------
+
+const SlotsPanel: React.FC<{ facilityId: string }> = ({ facilityId }) => {
+  const [view, setView] = useState<
+    | { phase: 'loading' }
+    | { phase: 'error'; message: string }
+    | { phase: 'ready'; slots: OwnerSlot[] }
+  >({ phase: 'loading' });
+  const [reloadKey, setReloadKey] = useState(0);
+  const [form, setForm] = useState<SlotInput>({ startTime: '', endTime: '', basePrice: '' });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState<Notice>(null);
+  const [busyTarget, setBusyTarget] = useState<string | null>(null);
+  const guard = useRef(createSingleFlight());
+
+  useEffect(() => {
+    let cancelled = false;
+    setView(prev => (prev.phase === 'ready' ? prev : { phase: 'loading' }));
+
+    ownerFacilityRepository
+      .loadSlots(facilityId)
+      .then(slots => !cancelled && setView({ phase: 'ready', slots }))
+      .catch(
+        err => !cancelled && setView({ phase: 'error', message: toOwnerError(err).message })
+      );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [facilityId, reloadKey]);
+
+  const existing = view.phase === 'ready' ? view.slots : [];
+
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (guard.current.busy) return;
+
+    await guard.current.run(async () => {
+      setBusyTarget('add');
+      setNotice(null);
+      setFieldErrors({});
+
+      try {
+        await ownerFacilityRepository.createSlot(facilityId, form, existing);
+        setForm({ startTime: '', endTime: '', basePrice: '' });
+        setNotice({ type: 'success', text: 'Slot added.' });
+      } catch (err) {
+        const failure = toOwnerError(err);
+        setFieldErrors(failure.fields);
+        setNotice({ type: 'error', text: failure.message });
+      } finally {
+        setBusyTarget(null);
+        setReloadKey(k => k + 1);
+      }
+    });
+  };
+
+  const toggle = async (slot: OwnerSlot) => {
+    if (guard.current.busy) return;
+
+    await guard.current.run(async () => {
+      setBusyTarget(`toggle:${slot.id}`);
+      setNotice(null);
+
+      try {
+        await ownerFacilityRepository.setSlotActive(slot.id, !slot.isActive);
+        setNotice({
+          type: 'success',
+          text: slot.isActive ? 'Slot deactivated.' : 'Slot activated.'
+        });
+      } catch (err) {
+        setNotice({ type: 'error', text: toOwnerError(err).message });
+      } finally {
+        setBusyTarget(null);
+        setReloadKey(k => k + 1);
+      }
+    });
+  };
+
+  const busy = busyTarget !== null;
+
+  return (
+    <div className="space-y-8">
+      <NoticeBox notice={notice} />
+
+      <form onSubmit={add} noValidate className="p-4 bg-neutral-50 border-2 border-neutral-100 rounded-lg">
+        <h4 className="font-black uppercase text-sm mb-4">Add a slot</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Field label="Start time" error={fieldErrors.startTime}>
+            {p => (
+              <input {...p} type="time" className={inputClass} value={form.startTime}
+                onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} disabled={busy} />
+            )}
+          </Field>
+          <Field label="End time" error={fieldErrors.endTime}>
+            {p => (
+              <input {...p} type="time" className={inputClass} value={form.endTime}
+                onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} disabled={busy} />
+            )}
+          </Field>
+          <Field label="Price (₹)" error={fieldErrors.basePrice}>
+            {p => (
+              <input {...p} inputMode="decimal" className={inputClass} value={form.basePrice}
+                onChange={e => setForm(f => ({ ...f, basePrice: e.target.value }))} disabled={busy} />
+            )}
+          </Field>
+        </div>
+        <button type="submit" disabled={busy} aria-busy={busyTarget === 'add'} className={`${primaryButton} mt-4`}>
+          {busyTarget === 'add' ? 'Adding…' : 'Add slot'}
+        </button>
+      </form>
+
+      {view.phase === 'loading' && (
+        <p className="text-xs font-bold uppercase text-neutral-400">Loading slots…</p>
+      )}
+      {view.phase === 'error' && (
+        <RetryBox message={view.message} onRetry={() => setReloadKey(k => k + 1)} />
+      )}
+      {view.phase === 'ready' && view.slots.length === 0 && (
+        <p className="text-xs font-bold uppercase text-neutral-400">
+          No slots yet. Add one above so players can book this venue.
+        </p>
+      )}
+      {view.phase === 'ready' && view.slots.length > 0 && (
+        <ul className="space-y-3">
+          {view.slots.map(slot => (
+            <li
+              key={slot.id}
+              className="flex flex-wrap items-center justify-between gap-4 p-4 bg-white border-2 border-neutral-100 rounded-lg"
+            >
+              <div>
+                <p className="text-sm font-black text-neutral-900">{slot.timeLabel}</p>
+                <p className="text-xs text-neutral-500">
+                  {slot.durationMin} min · ₹{slot.basePrice}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span
+                  className={`px-2 py-0.5 rounded-sm text-[9px] font-black uppercase tracking-wider ${
+                    slot.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-neutral-200 text-neutral-600'
+                  }`}
+                >
+                  {slot.isActive ? 'Active' : 'Inactive'}
+                </span>
+                <button
+                  onClick={() => toggle(slot)}
+                  disabled={busy}
+                  aria-busy={busyTarget === `toggle:${slot.id}`}
+                  className={secondaryButton}
+                >
+                  {busyTarget === `toggle:${slot.id}`
+                    ? 'Saving…'
+                    : slot.isActive
+                    ? 'Deactivate'
+                    : 'Activate'}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-[11px] text-neutral-400">
+        Slots with bookings or waitlist entries cannot be deleted, so they are switched off instead.
       </p>
     </div>
-  )}
-</div>
+  );
+};
 
+// -- Bookings -------------------------------------------------------------
 
-              {/* Amenities */}
-              <div className="bg-white p-6 rounded-lg border-2">
-                <h4 className="font-black uppercase mb-6">
-                  Facility Amenities
-                </h4>
+const BookingsPanel: React.FC<{ facilityId: string }> = ({ facilityId }) => {
+  const [view, setView] = useState<
+    | { phase: 'loading' }
+    | { phase: 'error'; message: string }
+    | { phase: 'ready'; bookings: UserBooking[] }
+  >({ phase: 'loading' });
+  const [reloadKey, setReloadKey] = useState(0);
 
-                <div className="mb-6">
-                  <button
-                    onClick={() => setShowAmenityModal(true)}
-                    className="px-5 py-3 rounded-xl bg-neutral-900 text-white text-[10px] font-black uppercase tracking-widest border-2 border-neutral-900 hover:bg-orange-600 hover:border-orange-700 transition-all duration-150 active:scale-95"
-                  >
-                    Add Amenity
-                  </button>
-                </div>
+  useEffect(() => {
+    let cancelled = false;
+    setView({ phase: 'loading' });
 
-                <div className="space-y-3">
-                  {selectedFac.amenityOptions &&
-                  selectedFac.amenityOptions.length > 0 ? (
-                    selectedFac.amenityOptions.map(amenity => (
-                      <div
-                        key={amenity.id}
-                        className="flex items-center justify-between p-4 rounded-lg border border-neutral-200 bg-neutral-50"
-                      >
-                        <div>
-                          <p className="font-black uppercase text-sm text-neutral-900">
-                            {amenity.name}
-                          </p>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 mt-1">
-                            {amenity.type} • ₹{amenity.price}
-                            {amenity.unit ? ` / ${amenity.unit}` : ''}
-                          </p>
-                        </div>
+    ownerFacilityRepository
+      .loadFacilityBookings(facilityId)
+      .then(bookings => !cancelled && setView({ phase: 'ready', bookings }))
+      .catch(
+        err => !cancelled && setView({ phase: 'error', message: toOwnerError(err).message })
+      );
 
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`px-2 py-1 rounded-sm text-[9px] font-black uppercase tracking-widest ${
-                              amenity.available !== false
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : 'bg-neutral-200 text-neutral-600'
-                            }`}
-                          >
-                            {amenity.available !== false
-                              ? 'Available'
-                              : 'Unavailable'}
-                          </span>
+    return () => {
+      cancelled = true;
+    };
+  }, [facilityId, reloadKey]);
 
-                          <button
-                            onClick={() =>
-                              handleToggleAmenityAvailability(amenity)
-                            }
-                            className="px-3 py-2 rounded-md bg-neutral-900 text-white text-[10px] font-black uppercase tracking-widest hover:bg-orange-600"
-                          >
-                            Toggle
-                          </button>
+  if (view.phase === 'loading') {
+    return <p className="text-xs font-bold uppercase text-neutral-400">Loading bookings…</p>;
+  }
+  if (view.phase === 'error') {
+    return <RetryBox message={view.message} onRetry={() => setReloadKey(k => k + 1)} />;
+  }
+  if (view.bookings.length === 0) {
+    return <p className="text-xs font-bold uppercase text-neutral-400">No bookings for this venue yet.</p>;
+  }
 
-                          <button
-                            onClick={() => handleDeleteAmenity(amenity.id)}
-                            className="px-3 py-2 rounded-md bg-red-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-red-700"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8 border-2 border-dashed border-neutral-200 rounded-lg">
-                      <p className="text-neutral-400 font-bold uppercase text-xs tracking-widest">
-                        No amenities added for this facility
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
+  const label: Record<string, string> = {
+    pending_payment: 'Unpaid hold',
+    confirmed: 'Confirmed',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
+    expired: 'Expired'
+  };
 
-              {/* Booking Audit */}
-<div className="bg-white rounded-lg border-2 border-neutral-200 overflow-hidden">
-  <div className="px-6 py-5 border-b border-neutral-100 flex justify-between items-center">
-    <h4 className="font-black uppercase text-sm">
-      Customer Bookings Audit
-    </h4>
-    <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">
-      DB_RELATION • {selectedFac.id}
-    </span>
-  </div>
-
-  {selectedFacilityBookings.length > 0 ? (
+  return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left">
-        <thead className="bg-neutral-50">
+      <table className="w-full text-left text-sm">
+        <caption className="sr-only">Bookings for this venue</caption>
+        <thead className="bg-neutral-50 text-neutral-400 font-black uppercase text-[10px] tracking-widest">
           <tr>
-            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">
-              Date
-            </th>
-            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">
-              Time Slot
-            </th>
-            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">
-              User Reference
-            </th>
-            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">
-              Status
-            </th>
+            <th scope="col" className="px-4 py-3">Date</th>
+            <th scope="col" className="px-4 py-3">Time</th>
+            <th scope="col" className="px-4 py-3">Amount</th>
+            <th scope="col" className="px-4 py-3">Status</th>
           </tr>
         </thead>
-
         <tbody className="divide-y divide-neutral-100">
-          {selectedFacilityBookings.map(booking => {
-            const slot = facSlots.find(s => s.id === booking.slotId);
-
-            return (
-              <tr key={booking.id}>
-                <td className="px-4 py-4 text-sm font-bold text-neutral-900">
-                  {booking.bookingDate}
-                </td>
-                <td className="px-4 py-4 text-sm text-neutral-600">
-                  {slot?.time || 'Unknown Slot'}
-                </td>
-                <td className="px-4 py-4 text-xs text-neutral-400 font-mono">
-                  {booking.userId}
-                </td>
-                <td className="px-4 py-4">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">
-                    ● CONFIRMED
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
+          {view.bookings.map(b => (
+            <tr key={b.id}>
+              <td className="px-4 py-3 font-bold">{b.bookingDate}</td>
+              <td className="px-4 py-3">{b.timeLabel}</td>
+              <td className="px-4 py-3">₹{b.amount}</td>
+              <td className="px-4 py-3 text-xs font-black uppercase">{label[effectiveStatus(b)]}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
-    </div>
-  ) : (
-    <div className="p-8 text-center">
-      <p className="text-neutral-400 font-bold uppercase text-xs tracking-widest">
-        No confirmed bookings yet
+      <p className="mt-3 text-[11px] text-neutral-400">
+        Read-only. Players are not identified here.
       </p>
     </div>
-  )}
-</div>
-</>
-)}
-</div>
-</div>
+  );
+};
 
-      {/* Add Amenity Modal */}
-      {showAmenityModal && selectedFac && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-neutral-900/80 backdrop-blur-sm"
-            onClick={() => {
-              setShowAmenityModal(false);
-              resetAmenityForm();
-            }}
-          ></div>
+// -- Dashboard ------------------------------------------------------------
 
-          <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border-2 border-neutral-200 p-8 animate-in zoom-in-95 duration-200">
-            <button
-              onClick={() => {
-                setShowAmenityModal(false);
-                resetAmenityForm();
-              }}
-              className="absolute top-4 right-4 w-10 h-10 rounded-full bg-neutral-900 text-white hover:bg-orange-600 transition-colors flex items-center justify-center"
-            >
-              <i className="fas fa-times text-sm"></i>
-            </button>
+type DetailTab = 'details' | 'hours' | 'slots' | 'bookings';
 
-            <h3 className="text-3xl font-black uppercase italic tracking-tight text-neutral-900 mb-2">
-              Add Amenity
-            </h3>
-            <p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-8">
-              Configure add-ons for {selectedFac.name}
-            </p>
+interface OwnerDashboardProps {
+  user: User;
+}
 
-            <form
-              onSubmit={handleAddAmenity}
-              className="grid grid-cols-1 md:grid-cols-2 gap-4"
-            >
-              <input
-                type="text"
-                placeholder="Amenity Name"
-                value={amenityForm.name}
-                onChange={e =>
-                  setAmenityForm(prev => ({
-                    ...prev,
-                    name: e.target.value
-                  }))
-                }
-                className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-              />
+const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user }) => {
+  const isOwner = user.role === 'owner';
 
-              <select
-                value={amenityForm.type}
-                onChange={e =>
-                  setAmenityForm(prev => ({
-                    ...prev,
-                    type: e.target.value as FacilityAmenity['type']
-                  }))
-                }
-                className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500 bg-white"
-              >
-                <option value="fnb">F&B</option>
-                <option value="recovery">Recovery</option>
-                <option value="shower">Shower</option>
-                <option value="equipment">Equipment</option>
-                <option value="wellness">Wellness</option>
-                <option value="other">Other</option>
-              </select>
+  const [view, setView] = useState<
+    | { phase: 'loading' }
+    | { phase: 'error'; message: string }
+    | { phase: 'ready'; facilities: OwnerFacility[] }
+  >({ phase: 'loading' });
+  const [reloadKey, setReloadKey] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [tab, setTab] = useState<DetailTab>('details');
+  const [notice, setNotice] = useState<Notice>(null);
+  // Latest action wins: see services/actionNotice.
+  const noticeSequence = useRef(createActionSequence());
 
-              <input
-                type="number"
-                placeholder="Price"
-                value={amenityForm.price}
-                onChange={e =>
-                  setAmenityForm(prev => ({
-                    ...prev,
-                    price: e.target.value
-                  }))
-                }
-                className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-              />
+  useEffect(() => {
+    // The database enforces who is an owner. This only avoids useless
+    // requests for accounts that are not.
+    if (!isOwner) return;
 
-              <input
-                type="text"
-                placeholder="Unit (item / 15 min / session)"
-                value={amenityForm.unit}
-                onChange={e =>
-                  setAmenityForm(prev => ({
-                    ...prev,
-                    unit: e.target.value
-                  }))
-                }
-                className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-              />
+    let cancelled = false;
+    setView(prev => (prev.phase === 'ready' ? prev : { phase: 'loading' }));
 
-              <div className="md:col-span-2 flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAmenityModal(false);
-                    resetAmenityForm();
-                  }}
-                  className="flex-1 px-4 py-3 rounded-lg bg-neutral-100 text-neutral-700 font-black uppercase tracking-widest text-xs hover:bg-neutral-200 transition-colors"
-                >
-                  Cancel
-                </button>
+    ownerFacilityRepository
+      .loadMyFacilities()
+      .then(facilities => {
+        if (cancelled) return;
+        setView({ phase: 'ready', facilities });
+        setSelectedId(current =>
+          current && facilities.some(f => f.id === current) ? current : facilities[0]?.id ?? null
+        );
+      })
+      .catch(err => {
+        if (!cancelled) setView({ phase: 'error', message: toOwnerError(err).message });
+      });
 
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-3 rounded-lg bg-neutral-900 text-white font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-colors"
-                >
-                  Save Amenity
-                </button>
-              </div>
+    return () => {
+      cancelled = true;
+    };
+  }, [user.id, isOwner, reloadKey]);
 
-            </form>
-          </div>
+  const header = (
+    <div className="flex items-center gap-3 mb-8">
+      <div
+        className="w-12 h-12 bg-neutral-900 transform -skew-x-12 flex items-center justify-center text-white"
+        aria-hidden="true"
+      >
+        <i className="fas fa-store"></i>
+      </div>
+      <div>
+        <h2 className="text-3xl sm:text-4xl font-black text-neutral-900 uppercase italic tracking-tighter">
+          Owner Portal
+        </h2>
+        <p className="text-neutral-500 text-xs font-bold uppercase tracking-widest">
+          {user.name ? `Signed in as ${user.name}` : 'Venue management'}
+        </p>
+      </div>
+    </div>
+  );
+
+  if (!isOwner) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8 font-sans">
+        {header}
+        <div role="status" className="bg-white rounded-lg border-2 border-neutral-100 p-6">
+          <p className="text-sm font-bold text-neutral-700">
+            Venue management is available to venue owner accounts only.
+          </p>
         </div>
+      </div>
+    );
+  }
+
+  const facilities = view.phase === 'ready' ? view.facilities : [];
+  const selected = facilities.find(f => f.id === selectedId) ?? null;
+
+  // A finished notice is obsolete the moment the next action starts, so it
+  // is cleared here, before the request. If this request then fails, the
+  // form shows its own error alone instead of beside the previous success.
+  // The result of a request is published only while no newer action has
+  // started, so a slow older request cannot overwrite a newer notice.
+  const handleCreate = async (input: FacilityInput) => {
+    const token = noticeSequence.current.begin();
+    setNotice(null);
+
+    const created = await ownerFacilityRepository.createFacility(input);
+    setCreating(false);
+    setSelectedId(created.id);
+    setTab('details');
+    if (noticeSequence.current.isCurrent(token)) {
+      setNotice({
+        type: 'success',
+        text: 'Venue created. It is pending approval and is not visible to players yet.'
+      });
+    }
+    setReloadKey(k => k + 1);
+  };
+
+  const handleUpdate = async (input: FacilityInput) => {
+    if (!selected) return;
+
+    const token = noticeSequence.current.begin();
+    setNotice(null);
+
+    await ownerFacilityRepository.updateFacility(selected.id, input);
+    if (noticeSequence.current.isCurrent(token)) {
+      setNotice({ type: 'success', text: 'Venue details saved.' });
+    }
+    setReloadKey(k => k + 1);
+  };
+
+  const tabs: Array<{ id: DetailTab; label: string }> = [
+    { id: 'details', label: 'Details' },
+    { id: 'hours', label: 'Hours' },
+    { id: 'slots', label: 'Slots' },
+    { id: 'bookings', label: 'Bookings' }
+  ];
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-8 font-sans">
+      {header}
+
+      {view.phase === 'loading' && (
+        <p className="text-xs font-bold uppercase text-neutral-400">Loading your venues…</p>
       )}
 
-      {showSlotModal && selectedFac && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div
-      className="absolute inset-0 bg-neutral-900/80 backdrop-blur-sm"
-      onClick={() => {
-        setShowSlotModal(false);
-        resetSlotForm();
-      }}
-    ></div>
+      {view.phase === 'error' && (
+        <RetryBox message={view.message} onRetry={() => setReloadKey(k => k + 1)} />
+      )}
 
-    <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border-2 border-neutral-200 p-8 animate-in zoom-in-95 duration-200">
-      <button
-        onClick={() => {
-          setShowSlotModal(false);
-          resetSlotForm();
-        }}
-        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-neutral-900 text-white hover:bg-orange-600 transition-colors flex items-center justify-center"
-      >
-        <i className="fas fa-times text-sm"></i>
-      </button>
+      {view.phase === 'ready' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <aside className="lg:col-span-1">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-black uppercase text-lg">Your venues</h3>
+              <button
+                onClick={() => {
+                  setCreating(true);
+                  setNotice(null);
+                }}
+                className={secondaryButton}
+              >
+                Add venue
+              </button>
+            </div>
 
-      <h3 className="text-3xl font-black uppercase italic tracking-tight text-neutral-900 mb-2">
-        Add Slot
-      </h3>
-      <p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-8">
-        Configure slot for {selectedFac.name}
-      </p>
+            {facilities.length === 0 && !creating && (
+              <div className="p-6 border-2 border-dashed border-neutral-200 rounded-lg text-center">
+                <p className="text-xs font-bold uppercase text-neutral-400">
+                  You have no venues yet.
+                </p>
+                <button onClick={() => setCreating(true)} className={`${primaryButton} mt-4`}>
+                  Add your first venue
+                </button>
+              </div>
+            )}
 
-      <form onSubmit={handleAddSlot} className="space-y-4">
-        <input
-          type="text"
-          placeholder="Example: 08:00 AM - 09:00 AM"
-          value={slotForm.time}
-          onChange={(e) =>
-            setSlotForm(prev => ({ ...prev, time: e.target.value }))
-          }
-          className="w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-        />
+            <ul className="space-y-3">
+              {facilities.map(f => (
+                <li key={f.id}>
+                  <button
+                    onClick={() => {
+                      setSelectedId(f.id);
+                      setCreating(false);
+                      setNotice(null);
+                    }}
+                    aria-current={!creating && f.id === selectedId ? 'true' : undefined}
+                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                      !creating && f.id === selectedId
+                        ? 'border-orange-500 bg-orange-50'
+                        : 'border-neutral-100 bg-white hover:border-neutral-300'
+                    }`}
+                  >
+                    <p className="font-black uppercase tracking-tight text-neutral-900 break-words">
+                      {f.name}
+                    </p>
+                    <p className="text-xs text-neutral-500 mt-1">
+                      {f.sport} · {f.city}
+                    </p>
+                    <div className="mt-2">
+                      <StatusBadge status={f.status} />
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </aside>
 
-        <input
-          type="number"
-          placeholder="Slot Price"
-          value={slotForm.price}
-          onChange={(e) =>
-            setSlotForm(prev => ({ ...prev, price: e.target.value }))
-          }
-          className="w-full px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-        />
+          <section className="lg:col-span-2" aria-label="Venue details">
+            <NoticeBox notice={notice} />
 
-        <div className="flex gap-3 pt-2">
-          <button
-            type="button"
-            onClick={() => {
-              setShowSlotModal(false);
-              resetSlotForm();
-            }}
-            className="flex-1 px-4 py-3 rounded-lg bg-neutral-100 text-neutral-700 font-black uppercase tracking-widest text-xs hover:bg-neutral-200 transition-colors"
-          >
-            Cancel
-          </button>
+            {creating && (
+              <div className="bg-white rounded-lg border-2 border-neutral-100 p-6">
+                <h3 className="font-black uppercase text-lg mb-1">New venue</h3>
+                <p className="text-xs text-neutral-500 mb-6">
+                  New venues start as pending and become visible to players once an administrator
+                  approves them.
+                </p>
+                <FacilityForm
+                  initial={emptyInput}
+                  submitLabel="Create venue"
+                  busyLabel="Creating…"
+                  onSubmit={handleCreate}
+                  onCancel={() => setCreating(false)}
+                />
+              </div>
+            )}
 
-          <button
-            type="submit"
-            className="flex-1 px-4 py-3 rounded-lg bg-neutral-900 text-white font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-colors"
-          >
-            Save Slot
-          </button>
+            {!creating && selected && (
+              <div className="bg-white rounded-lg border-2 border-neutral-100">
+                <div className="p-6 border-b-2 border-neutral-100">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h3 className="font-black uppercase text-2xl tracking-tight break-words">
+                      {selected.name}
+                    </h3>
+                    <StatusBadge status={selected.status} />
+                  </div>
+                  <p className="text-xs text-neutral-500 mt-2">
+                    {describeFacilityStatus(selected.status).explanation}
+                  </p>
+                </div>
+
+                <div role="tablist" aria-label="Venue sections" className="flex border-b-2 border-neutral-100 bg-neutral-50 overflow-x-auto">
+                  {tabs.map(t => (
+                    <button
+                      key={t.id}
+                      role="tab"
+                      aria-selected={tab === t.id}
+                      onClick={() => {
+                        setTab(t.id);
+                        setNotice(null);
+                      }}
+                      className={`px-5 py-3 text-[11px] font-black uppercase tracking-widest whitespace-nowrap ${
+                        tab === t.id
+                          ? 'bg-white text-orange-600 border-b-2 border-orange-600'
+                          : 'text-neutral-400 hover:text-neutral-700'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div role="tabpanel" className="p-6">
+                  {tab === 'details' && (
+                    <FacilityForm
+                      key={selected.id}
+                      initial={toInput(selected)}
+                      submitLabel="Save changes"
+                      busyLabel="Saving…"
+                      onSubmit={handleUpdate}
+                    />
+                  )}
+                  {tab === 'hours' && <HoursPanel key={selected.id} facilityId={selected.id} />}
+                  {tab === 'slots' && <SlotsPanel key={selected.id} facilityId={selected.id} />}
+                  {tab === 'bookings' && <BookingsPanel key={selected.id} facilityId={selected.id} />}
+                </div>
+              </div>
+            )}
+
+            {!creating && !selected && facilities.length > 0 && (
+              <p className="text-xs font-bold uppercase text-neutral-400">
+                Select a venue to manage it.
+              </p>
+            )}
+          </section>
         </div>
-      </form>
-    </div>
-  </div>
-)}
-
-
-{showVenueModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div
-      className="absolute inset-0 bg-neutral-900/80 backdrop-blur-sm"
-      onClick={() => {
-        setShowVenueModal(false);
-        resetVenueForm();
-      }}
-    ></div>
-
-    <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border-2 border-neutral-200 p-8 animate-in zoom-in-95 duration-200">
-      <button
-        onClick={() => {
-          setShowVenueModal(false);
-          resetVenueForm();
-        }}
-        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-neutral-900 text-white hover:bg-orange-600 transition-colors flex items-center justify-center"
-      >
-        <i className="fas fa-times text-sm"></i>
-      </button>
-
-      <h3 className="text-3xl font-black uppercase italic tracking-tight text-neutral-900 mb-2">
-        Add New Venue
-      </h3>
-      <p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-8">
-        Register a new facility under your ownership
-      </p>
-
-      <form onSubmit={handleAddVenue} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <input
-          type="text"
-          placeholder="Facility Name"
-          value={venueForm.name}
-          onChange={(e) =>
-            setVenueForm(prev => ({ ...prev, name: e.target.value }))
-          }
-          className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-        />
-
-        <input
-          type="text"
-          placeholder="Sport"
-          value={venueForm.sport}
-          onChange={(e) =>
-            setVenueForm(prev => ({ ...prev, sport: e.target.value }))
-          }
-          className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-        />
-
-        <input
-          type="text"
-          placeholder="Location"
-          value={venueForm.location}
-          onChange={(e) =>
-            setVenueForm(prev => ({ ...prev, location: e.target.value }))
-          }
-          className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-        />
-
-        <input
-          type="text"
-          placeholder="City"
-          value={venueForm.city}
-          onChange={(e) =>
-            setVenueForm(prev => ({ ...prev, city: e.target.value }))
-          }
-          className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-        />
-
-        <input
-          type="number"
-          placeholder="Base Price"
-          value={venueForm.basePrice}
-          onChange={(e) =>
-            setVenueForm(prev => ({ ...prev, basePrice: e.target.value }))
-          }
-          className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-        />
-
-        <input
-          type="text"
-          placeholder="Image URL (optional)"
-          value={venueForm.imageUrl}
-          onChange={(e) =>
-            setVenueForm(prev => ({ ...prev, imageUrl: e.target.value }))
-          }
-          className="px-4 py-3 border-2 border-neutral-200 rounded-lg font-bold text-neutral-900 outline-none focus:border-orange-500"
-        />
-
-        <div className="md:col-span-2 flex gap-3 pt-2">
-          <button
-            type="button"
-            onClick={() => {
-              setShowVenueModal(false);
-              resetVenueForm();
-            }}
-            className="flex-1 px-4 py-3 rounded-lg bg-neutral-100 text-neutral-700 font-black uppercase tracking-widest text-xs hover:bg-neutral-200 transition-colors"
-          >
-            Cancel
-          </button>
-
-          <button
-            type="submit"
-            className="flex-1 px-4 py-3 rounded-lg bg-neutral-900 text-white font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-colors"
-          >
-            Save Venue
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-)}
-
+      )}
     </div>
   );
 };
