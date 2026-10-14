@@ -1,5 +1,6 @@
 // services/aiEngine.ts
 
+import { parseSlotStartHour } from "./slotTime";
 import {
   SlotDemandPrediction,
   AIRecommendation,
@@ -32,11 +33,14 @@ export const aiEngine = {
 
       const occupancyScore = bookingsForSlot;
 
-      const hour = parseInt(slot.time.split(":")[0]);
+      // Slot times are display strings such as "06:00 PM - 07:00 PM",
+      // so the meridiem must be honoured (18:00 is prime time, 06:00 is
+      // not). An unreadable time is never treated as prime time.
+      const hour = parseSlotStartHour(slot.time);
 
-      const isPrimeHour = hour >= 17 && hour <= 21;
+      const isPrimeHour = hour !== null && hour >= 17 && hour <= 21;
 
-      let demandLevel: "Low" | "Normal" | "High";
+      let demandLevel: "Low" | "Medium" | "High";
       let multiplier = 1;
       let reasoning = "Standard demand window.";
 
@@ -46,7 +50,7 @@ export const aiEngine = {
         reasoning =
           "High booking density and peak timing indicate surge demand.";
       } else if (occupancyScore >= 2) {
-        demandLevel = "Normal";
+        demandLevel = "Medium";
         multiplier = 1.1;
         reasoning =
           "Moderate demand observed from recent booking activity.";
@@ -61,7 +65,10 @@ export const aiEngine = {
         slotId: slot.id,
         demandLevel,
         isSurge: demandLevel === "High",
+        surgePercent: Math.max(0, Math.round((multiplier - 1) * 100)),
         suggestedPrice: Math.round(slot.basePrice * multiplier),
+        // Heuristic certainty: more booking history, more confidence.
+        confidence: occupancyScore >= 5 ? 0.85 : occupancyScore >= 2 ? 0.7 : 0.55,
         reasoning
       };
     });
@@ -86,10 +93,12 @@ export const aiEngine = {
 
         return {
           facilityId: f.id,
+          score: preferenceMatch ? 85 : 60,
           reasoning: preferenceMatch
             ? "Matches your playing history and preferred sport."
             : "Trending among similar skill-level players.",
-          confidence: preferenceMatch ? "High" : "Medium"
+          confidence: preferenceMatch ? "High" : "Medium",
+          basis: preferenceMatch ? ["Sport Preference"] : ["Popularity"]
         };
       });
   },
@@ -108,7 +117,7 @@ export const aiEngine = {
 
     return revenueData.map(data => {
 
-      let performance: "High Performing" | "Underperforming" | "Stable";
+      let performance: "High Performing" | "Underperforming" | "Average";
       let suggestedAction: string;
       let projectedRevenueImpact: number;
 
@@ -123,7 +132,7 @@ export const aiEngine = {
           "Introduce targeted promotions to boost utilization.";
         projectedRevenueImpact = 15;
       } else {
-        performance = "Stable";
+        performance = "Average";
         suggestedAction =
           "Maintain pricing. Monitor weekly booking patterns.";
         projectedRevenueImpact = 4;
