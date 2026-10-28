@@ -445,3 +445,10 @@ describe('truthful schedule labels', () => {
     expect(activeSource).toMatch(/: 'Unpaid hold'\s*\n\s*: 'Confirmed'/);
   });
 });
+
+describe('default booking date', () => {
+  it('opens on a date the database accepts and the viewer does not consider past', () => {
+    expect(activeSource).toMatch(/useState<string>\(\(\) => defaultBookingDate\(\)\)/);
+    expect(activeSource).toContain("from '../services/bookingDate'");
+  });
+});

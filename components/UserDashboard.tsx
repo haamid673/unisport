@@ -45,6 +45,7 @@ import {
   WaitlistEntry
 } from '../services/waitlistRepository';
 import { userService } from '../services/userService';
+import { defaultBookingDate } from '../services/bookingDate';
 import { PAYMENTS_AVAILABLE } from '../services/razorpayCheckout';
 import { hasUnresolvedPayment, newCheckoutCertainlyRefused, onBookingPaymentChange } from '../services/bookingCheckout';
 import { fetchOpenAttemptLeases, type AttemptLeaseFacts } from '../services/paymentClient';
@@ -61,7 +62,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [allSlots, setAllSlots] = useState<Slot[]>([]);
 
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(() => defaultBookingDate());
   const [selectedSport, setSelectedSport] = useState<string>('All');
   // The chosen city's display name. Matching always goes through the
   // normalised key (see services/cityFilter), so every spelling of a

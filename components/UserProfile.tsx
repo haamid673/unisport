@@ -172,6 +172,9 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                 className="w-full border border-neutral-200 rounded-md p-3 focus:outline-none focus:border-orange-500"
                 placeholder="Preferences (comma separated)"
               />
+              <p className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+                Bio and preferences are saved in this browser only. Name and phone are saved to your account.
+              </p>
 
               <div className="flex gap-4">
                 <button
