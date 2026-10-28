@@ -1,6 +1,6 @@
 begin;
 
-select plan(37);
+select plan(39);
 
 
 -- ============================================================
@@ -62,7 +62,19 @@ values
   ('public.bookings',                 'SELECT'),
   ('public.payments',                 'SELECT'),
   ('public.refunds',                  'SELECT'),
+  ('public.payment_attempts',         'SELECT'),
   ('public.waitlist_entries',         'SELECT');
+
+-- Tables only the server may touch: clients hold NO privilege on them
+-- (payment_privileges_catalog_test.sql also checks this from the catalog).
+create temp table h1_server_only (
+  tbl text primary key
+);
+
+insert into h1_server_only (tbl)
+values
+  ('public.payment_events'),
+  ('public.reconciliation_runs');
 
 
 -- ============================================================
@@ -75,8 +87,20 @@ select is(
    join pg_namespace n on n.oid = c.relnamespace
    where n.nspname = 'public'
      and c.relkind in ('r', 'p', 'v', 'm', 'f')),
-  (select string_agg(substr(tbl, 8), ',' order by tbl) from h1_expected),
+  (select string_agg(substr(tbl, 8), ',' order by tbl)
+   from (select tbl from h1_expected union all select tbl from h1_server_only) m),
   'public contains exactly the application tables this model covers'
+);
+
+select is(
+  (select coalesce(string_agg(
+            tbl || '=' || pg_temp.table_privs('anon', tbl) || '/'
+                       || pg_temp.table_privs('authenticated', tbl), '; ' order by tbl), '')
+   from h1_server_only
+   where pg_temp.table_privs('anon', tbl) <> ''
+      or pg_temp.table_privs('authenticated', tbl) <> ''),
+  '',
+  'server-only payment tables (payment_events, reconciliation_runs) grant clients nothing'
 );
 
 select is(
@@ -172,7 +196,7 @@ select is(
   (select coalesce(string_agg(tbl, ',' order by tbl), '')
    from h1_expected
    where tbl in (
-     'public.bookings', 'public.payments',
+     'public.bookings', 'public.payments', 'public.payment_attempts',
      'public.refunds', 'public.waitlist_entries')
      and (
        has_table_privilege('authenticated', tbl, 'INSERT')
@@ -180,7 +204,7 @@ select is(
        or has_table_privilege('authenticated', tbl, 'DELETE')
      )),
   '',
-  'authenticated has no direct INSERT/UPDATE/DELETE on bookings, payments, refunds or waitlist_entries'
+  'authenticated has no direct INSERT/UPDATE/DELETE on bookings, payments, payment_attempts, refunds or waitlist_entries'
 );
 
 select is(
@@ -188,7 +212,7 @@ select is(
    from h1_expected e
    join pg_attribute a on a.attrelid = e.tbl::regclass
    where e.tbl in (
-       'public.bookings', 'public.payments',
+       'public.bookings', 'public.payments', 'public.payment_attempts',
        'public.refunds', 'public.waitlist_entries')
      and a.attnum > 0 and not a.attisdropped
      and (
@@ -196,7 +220,7 @@ select is(
        or has_column_privilege('authenticated', e.tbl, a.attname, 'UPDATE')
      )),
   0,
-  'nor any column-level INSERT/UPDATE on those four tables'
+  'nor any column-level INSERT/UPDATE on those tables'
 );
 
 select ok(
@@ -253,7 +277,14 @@ select is(
 
 
 -- ============================================================
--- 5. service_role is unchanged
+-- 5. service_role is unchanged, except on the payment tables
+--
+-- The payment tables (payments, refunds, payment_attempts,
+-- payment_events, reconciliation_runs) deliberately give
+-- service_role only SELECT, INSERT and UPDATE (plus MAINTAIN on
+-- PostgreSQL 17, which cannot alter data): TRUNCATE fires no
+-- trigger, so with it every payment guard would be bypassable.
+-- See payment_privileges_catalog_test.sql.
 -- ============================================================
 
 select is(
@@ -261,9 +292,26 @@ select is(
      string_agg(tbl || '=' || pg_temp.table_privs('service_role', tbl), '; ' order by tbl),
      '')
    from h1_expected
-   where pg_temp.table_privs('service_role', tbl) <> pg_temp.all_privs()),
+   where tbl not in ('public.payments', 'public.refunds', 'public.payment_attempts')
+     and pg_temp.table_privs('service_role', tbl) <> pg_temp.all_privs()),
   '',
-  'service_role still holds every table privilege on every application table'
+  'service_role still holds every table privilege on every pre-existing application table'
+);
+
+select is(
+  (select coalesce(
+     string_agg(tbl || '=' || pg_temp.table_privs('service_role', tbl), '; ' order by tbl),
+     '')
+   from (
+     select 'public.payments' as tbl union all select 'public.refunds'
+     union all select 'public.payment_attempts'
+     union all select tbl from h1_server_only
+   ) t
+   where pg_temp.table_privs('service_role', tbl) <>
+     case when current_setting('server_version_num')::int >= 170000
+          then 'INSERT,MAINTAIN,SELECT,UPDATE' else 'INSERT,SELECT,UPDATE' end),
+  '',
+  'service_role holds only SELECT, INSERT and UPDATE on the payment tables'
 );
 
 

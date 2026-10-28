@@ -386,6 +386,25 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Payment Edge Functions (see supabase/functions/README.md). Their
+# Razorpay credentials are server-only secrets, supplied with
+# `supabase functions serve --env-file <file outside the repo>`; they are
+# never configured here and never in a VITE_* variable.
+[functions.payments-create-order]
+# Called by the signed-in user: the gateway requires a valid JWT, and the
+# function validates it again with GoTrue to obtain the user id.
+verify_jwt = true
+
+[functions.payments-verify]
+# Called by the signed-in user after Checkout; same JWT handling as
+# payments-create-order. It only triggers a server-side provider fetch.
+verify_jwt = true
+
+[functions.payments-webhook]
+# Called by Razorpay, which sends no Supabase JWT. Authenticated by the
+# X-Razorpay-Signature HMAC over the raw body inside the function.
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
