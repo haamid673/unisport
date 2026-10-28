@@ -86,6 +86,7 @@ create temp table expected_routine_exec (
 insert into expected_routine_exec values
   -- client RPC API
   ('create_booking(uuid,uuid,date)',         'authenticated'),
+  ('cancel_booking(uuid)',                   'authenticated'),
   ('join_waitlist(uuid,uuid,date)',          'authenticated'),
   ('leave_waitlist(uuid)',                   'authenticated'),
   ('accept_waitlist_offer(uuid)',            'authenticated'),

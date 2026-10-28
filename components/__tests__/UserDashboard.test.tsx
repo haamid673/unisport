@@ -187,13 +187,13 @@ describe('slot availability integration', () => {
 
   it('re-reads on facility, date and Retry, and cancels stale responses', () => {
     expect(activeSource).toMatch(
-      /\[user\.id, selectedFacility\?\.id, selectedDate, availabilityReloadKey\]/
+      /\[user\.id, selectedFacility\?\.id, selectedDate, availabilityReloadKey, availabilityRefreshTick\]/
     );
     expect(activeSource).toMatch(/setAvailabilityReloadKey\(k => k \+ 1\)/);
 
     const effect = activeSource.slice(
       activeSource.indexOf('.loadSlotAvailability('),
-      activeSource.indexOf('availabilityReloadKey]);')
+      activeSource.indexOf('availabilityRefreshTick]);')
     );
     expect(effect).toContain('if (cancelled) return;');
   });
@@ -218,7 +218,7 @@ describe('slot availability integration', () => {
     const from = activeSource.indexOf('.loadSlotAvailability(');
     const catchBlock = activeSource.slice(
       activeSource.indexOf('.catch(err =>', from),
-      activeSource.indexOf('availabilityReloadKey]);')
+      activeSource.indexOf('availabilityRefreshTick]);')
     );
     expect(catchBlock).toContain("phase: 'error'");
     expect(catchBlock).not.toMatch(/available|byId|getAllBookings|storageService/);
@@ -352,5 +352,96 @@ describe('slot row: the holder of a live waitlist offer', () => {
     // the existing cadence is unchanged: a 60 s waitlist poll and a 15 s clock tick
     expect(activeSource).toMatch(/setInterval\(\(\) => setWaitlistReloadKey\(k => k \+ 1\), 60_000\)/);
     expect(activeSource).toMatch(/setInterval\(\(\) => setClock\(Date\.now\(\)\), 15_000\)/);
+  });
+});
+
+describe('cancelling an unpaid hold from Your Schedule', () => {
+  const handler = activeSource.slice(
+    activeSource.indexOf('const handleCancelHold'),
+    activeSource.indexOf('// Entries the user can still act on')
+  );
+
+  it('cancels only through the repository RPC wrapper, never by writing the table', () => {
+    expect(handler).toContain('bookingRepository.cancelBooking(booking.id)');
+    expect(activeSource).not.toMatch(/from\('bookings'\)\s*\.(update|delete)/);
+  });
+
+  it('runs under its own synchronous single-flight guard', () => {
+    expect(activeSource).toMatch(/const cancelGuard = useRef\(createSingleFlight\(\)\)/);
+    expect(handler).toMatch(/if \(cancelGuard\.current\.busy\) return;/);
+    expect(handler).toMatch(/cancelGuard\.current\.run\(/);
+  });
+
+  it('reports success only from the awaited answer, and tells an already-lapsed hold apart', () => {
+    const afterAwait = handler.slice(handler.indexOf('await bookingRepository.cancelBooking'));
+    expect(afterAwait.indexOf("phase: 'success'")).toBeGreaterThan(-1);
+    expect(handler).toMatch(/outcome === 'cancelled'/);
+    expect(handler).toContain('had already expired');
+  });
+
+  it('shows the safe error message and never raw server text', () => {
+    expect(handler).toMatch(/toCancelError\(err\)\.message/);
+  });
+
+  it('re-reads bookings, availability and the waitlist whatever the outcome', () => {
+    const fin = handler.slice(handler.indexOf('finally'));
+    expect(fin).toContain('setBookingsReloadKey');
+    expect(fin).toContain('setAvailabilityReloadKey');
+    expect(fin).toContain('setWaitlistReloadKey');
+  });
+
+  it('asks for confirmation before cancelling and can be backed out of', () => {
+    expect(activeSource).toContain('Cancel this reservation?');
+    expect(activeSource).toContain('Yes, cancel');
+    expect(activeSource).toContain('Keep it');
+    // the first button only opens the confirm step
+    expect(activeSource).toMatch(/setCancelConfirmId\(b\.id\)/);
+    expect(activeSource).toMatch(/onClick=\{\(\) => handleCancelHold\(b\)\}/);
+  });
+
+  it('is offered only for an unpaid hold, and not while a payment is being handled', () => {
+    expect(activeSource).toMatch(/const canCancel =\s*held &&/);
+    expect(activeSource).toMatch(/scheduleBookingId !== b\.id/);
+    expect(activeSource).toMatch(/hasUnresolvedPayment\(b\.id\) \|\| openedElsewhere/);
+  });
+
+  it('disables the control while a cancellation is in flight', () => {
+    expect(activeSource).toMatch(/disabled=\{cancelFlow\.phase === 'submitting'\}/);
+  });
+});
+
+describe('slot picker: bounded availability refresh', () => {
+  const effect = activeSource.slice(
+    activeSource.indexOf('const hasOpenFacility'),
+    activeSource.indexOf('// Real bookings, read through the repository.')
+  );
+
+  it('re-reads about once a minute, and only while a venue is open', () => {
+    expect(effect).toMatch(/if \(!hasOpenFacility\) return;/);
+    expect(effect).toMatch(/setInterval\(refresh, 60_000\)/);
+    expect(effect).toMatch(/clearInterval\(timer\)/);
+  });
+
+  it('skips hidden tabs and never re-reads on focus sooner than 15 s after the last read', () => {
+    expect(effect).toMatch(/visibilityState === 'hidden'\) return/);
+    expect(effect).toMatch(/Date\.now\(\) - last >= 15_000/);
+    expect(effect).toMatch(/removeEventListener\('focus'/);
+    expect(effect).toMatch(/removeEventListener\('visibilitychange'/);
+  });
+
+  it('refreshes quietly: not part of the key, so rows do not flash loading, and a failure keeps the last answer', () => {
+    const keyDef = activeSource.slice(
+      activeSource.indexOf('const availabilityKey'),
+      activeSource.indexOf('const availability: AvailabilityView')
+    );
+    expect(keyDef).not.toContain('availabilityRefreshTick');
+    expect(activeSource).toMatch(/availabilityReloadKey, availabilityRefreshTick\]/);
+    expect(activeSource).toMatch(/if \(quiet\) return;/);
+  });
+});
+
+describe('truthful schedule labels', () => {
+  it('never labels an unpaid hold "Confirmed", even without an expiry time', () => {
+    expect(activeSource).toMatch(/: 'Unpaid hold'\s*\n\s*: 'Confirmed'/);
   });
 });

@@ -34,6 +34,7 @@ import {
   RESERVATIONS_ENABLED,
   effectiveStatus,
   toBookingError,
+  toCancelError,
   UserBooking
 } from '../services/bookingRepository';
 import {
@@ -128,6 +129,18 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
     | { phase: 'error'; message: string }
   >({ phase: 'idle' });
 
+  // Cancelling an unpaid hold from Your Schedule: one at a time (enforced
+  // synchronously), asked twice (confirm) so a stray tap cannot release a
+  // slot the customer wanted.
+  const cancelGuard = useRef(createSingleFlight());
+  const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
+  const [cancelFlow, setCancelFlow] = useState<
+    | { phase: 'idle' }
+    | { phase: 'submitting'; bookingId: string }
+    | { phase: 'success'; message: string }
+    | { phase: 'error'; message: string }
+  >({ phase: 'idle' });
+
   // Re-render clock so offers and holds visibly lapse without a reload.
   const [clock, setClock] = useState(() => Date.now());
   const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
@@ -149,6 +162,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
   // between a date change and the next read the previous date's
   // statuses are never shown (or acted on) for the new one.
   const [availabilityReloadKey, setAvailabilityReloadKey] = useState(0);
+  // Quiet refresh while the slot picker stays open: bumped by a slow
+  // timer and by returning to the tab. It is NOT part of availabilityKey,
+  // so the rows keep their last answer while it is re-read instead of
+  // flashing "loading".
+  const [availabilityRefreshTick, setAvailabilityRefreshTick] = useState(0);
+  const quietRefresh = useRef(false);
   const [availabilityState, setAvailabilityState] = useState<{
     key: string;
     view: AvailabilityView;
@@ -257,6 +276,8 @@ const calculateDistanceKm = (
 
   let cancelled = false;
   const key = availabilityKey;
+  const quiet = quietRefresh.current;
+  quietRefresh.current = false;
 
   facilityRepository
     .loadSlotAvailability(selectedFacility.id, selectedDate)
@@ -266,6 +287,10 @@ const calculateDistanceKm = (
     })
     .catch(err => {
       if (cancelled) return;
+      // A failed background refresh keeps the last answer; the booking
+      // call itself is still decided by the database. Only a read the
+      // customer is waiting on shows an error.
+      if (quiet) return;
       setAvailabilityState({
         key,
         view: {
@@ -281,7 +306,37 @@ const calculateDistanceKm = (
   return () => {
     cancelled = true;
   };
-}, [user.id, selectedFacility?.id, selectedDate, availabilityReloadKey]);
+}, [user.id, selectedFacility?.id, selectedDate, availabilityReloadKey, availabilityRefreshTick]);
+
+ // While a venue's slots are on screen, re-read them about once a minute
+ // and when the customer comes back to the tab, so a slot someone else
+ // booked or released does not stay stale. Bounded: nothing runs for a
+ // hidden tab, and a focus never re-reads sooner than 15 s after the last.
+ const hasOpenFacility = Boolean(selectedFacility);
+ useEffect(() => {
+  if (!hasOpenFacility) return;
+
+  let last = Date.now();
+  const refresh = () => {
+    if (document.visibilityState === 'hidden') return;
+    last = Date.now();
+    quietRefresh.current = true;
+    setAvailabilityRefreshTick(k => k + 1);
+  };
+  const onReturn = () => {
+    if (Date.now() - last >= 15_000) refresh();
+  };
+
+  const timer = setInterval(refresh, 60_000);
+  window.addEventListener('focus', onReturn);
+  document.addEventListener('visibilitychange', onReturn);
+
+  return () => {
+    clearInterval(timer);
+    window.removeEventListener('focus', onReturn);
+    document.removeEventListener('visibilitychange', onReturn);
+  };
+}, [hasOpenFacility]);
 
   // Real bookings, read through the repository. Reloaded after every
   // reservation attempt and on Retry.
@@ -599,6 +654,38 @@ const handleAcceptOffer = (entry: WaitlistEntry) => {
     return PAYMENTS_AVAILABLE
       ? `Offer accepted. The slot is held until ${until} for ₹${accepted.amount}. Pay from Your Schedule before the hold expires.`
       : `Offer accepted. The slot is held until ${until} for ₹${accepted.amount}. Payment is not available yet, so the hold expires automatically.`;
+  });
+};
+
+// Cancels the customer's own unpaid hold. The database decides: success
+// is reported only from its answer, and bookings, availability and the
+// waitlist are re-read afterwards whatever happened.
+const handleCancelHold = (booking: UserBooking) => {
+  if (cancelGuard.current.busy) return;
+
+  void cancelGuard.current.run(async () => {
+    setCancelConfirmId(null);
+    setCancelFlow({ phase: 'submitting', bookingId: booking.id });
+
+    try {
+      const outcome = await bookingRepository.cancelBooking(booking.id);
+      setCancelFlow({
+        phase: 'success',
+        message:
+          outcome === 'cancelled'
+            ? 'Reservation cancelled. The slot is free again.'
+            : 'That reservation had already expired, so there was nothing to cancel.'
+      });
+    } catch (err) {
+      setCancelFlow({
+        phase: 'error',
+        message: toCancelError(err).message
+      });
+    } finally {
+      setBookingsReloadKey(k => k + 1);
+      setAvailabilityReloadKey(k => k + 1);
+      setWaitlistReloadKey(k => k + 1);
+    }
   });
 };
 
@@ -1418,6 +1505,23 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
               </div>
             )}
 
+            <div aria-live="polite">
+              {cancelFlow.phase === 'success' && (
+                <div role="status" className="mb-4 p-3 bg-emerald-50 border border-emerald-200">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">
+                    {cancelFlow.message}
+                  </p>
+                </div>
+              )}
+              {cancelFlow.phase === 'error' && (
+                <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-200">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-red-700">
+                    {cancelFlow.message}
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-4" aria-live="polite">
               {bookingsView.phase === 'loading' && (
                 <p className="text-neutral-400 text-xs font-bold uppercase">
@@ -1452,6 +1556,13 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
                   // before a reload): the server would refuse a new one here.
                   const openedElsewhere =
                     held && newCheckoutCertainlyRefused(b.id, leaseFacts ? leaseFacts.get(b.id) ?? [] : undefined);
+                  // Cancel is offered only while nothing is paying this hold; the
+                  // database refuses it too if a payment is in flight.
+                  const cancelling = cancelFlow.phase === 'submitting' && cancelFlow.bookingId === b.id;
+                  const canCancel =
+                    held &&
+                    scheduleBookingId !== b.id &&
+                    !(PAYMENTS_AVAILABLE && (hasUnresolvedPayment(b.id) || openedElsewhere));
 
                   return (
                     <div
@@ -1477,11 +1588,13 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
                             : 'bg-emerald-100 text-emerald-700'
                         }`}
                       >
-                        {held && b.expiresAt
-                          ? `Held until ${new Date(b.expiresAt).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}`
+                        {held
+                          ? b.expiresAt
+                            ? `Held until ${new Date(b.expiresAt).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}`
+                            : 'Unpaid hold'
                           : 'Confirmed'}
                       </p>
 
@@ -1515,6 +1628,45 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
                           >
                             Check payment
                           </button>
+                        </div>
+                      )}
+
+                      {canCancel && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {cancelConfirmId === b.id && !cancelling ? (
+                            <>
+                              <p className="w-full text-[10px] font-bold uppercase tracking-wide text-neutral-600">
+                                Cancel this reservation? The slot will be released.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => handleCancelHold(b)}
+                                className="px-4 py-2 bg-red-600 text-white text-[10px] font-black uppercase tracking-widest rounded-md hover:bg-red-700 transition-all"
+                              >
+                                Yes, cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCancelConfirmId(null)}
+                                className="px-4 py-2 bg-white border border-neutral-300 text-[10px] font-black uppercase tracking-widest rounded-md hover:border-black transition-all"
+                              >
+                                Keep it
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={cancelFlow.phase === 'submitting'}
+                              aria-busy={cancelling}
+                              onClick={() => {
+                                setCancelFlow({ phase: 'idle' });
+                                setCancelConfirmId(b.id);
+                              }}
+                              className="px-4 py-2 bg-white border border-neutral-300 text-[10px] font-black uppercase tracking-widest rounded-md hover:border-red-600 hover:text-red-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {cancelling ? 'Cancelling…' : 'Cancel reservation'}
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>

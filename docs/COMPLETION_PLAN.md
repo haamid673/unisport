@@ -247,3 +247,17 @@ Environment notes:
 - The old `/tmp/unisport-slice1h` workspace no longer exists. For the SQL suite use `supabase test db --workdir <unlinked dir> --db-url "postgresql://…:59402/postgres?sslmode=disable"` (`sslmode=disable` is required; the CLI otherwise insists on TLS).
 
 Still open from Phase 0: stack-parity decision (0.3), live waitlist-offer browser check (0.4), checkpoint commits (0.5).
+
+### Phase 0.3–0.5 — done 28 Oct 2026
+- Backup (outside the repo, mode 600), then the 7 payment migrations applied to `unisport-ui` through an unlinked workdir: **36 of 36**, data/roles/guards/cron/customer RPCs intact.
+- Five local checkpoint commits (`699779a`, `75103e9`, `609ba37`, `b07c5ed`, `ddf18cf`); nothing pushed; committed tree re-verified green (545 tests, lint, build).
+
+### Phase 1 — audit complete
+See `docs/MVP_BACKLOG.md`. Open: authenticated visual pass (needs a sign-in), live waitlist-offer check (B-02).
+
+### Phase 2 — customer booking lifecycle: code complete 28 Oct 2026 (browser/live checks pending)
+- **B-01 cancel an unpaid hold.** New forward-only migration `20261025190000_cancel_booking.sql` (`cancel_booking(uuid)`: own unpaid hold only; UB005 for paid/finished, UB006 while a payment attempt is creating/open; idempotent for cancelled/expired; offers the freed slot to the next waitlist entry). pgTAP: `cancel_booking_test.sql` (48) and `cancel_booking_concurrency_test.sql` (15, multi-session), both mutation-checked. Repository `cancelBooking` + `toCancelError`; Cancel reservation button with confirm step on held rows in Your Schedule (single-flight, re-reads bookings/availability/waitlist). The catalog privilege test's allow-list now names `cancel_booking(uuid)`.
+- **B-03 bounded availability refresh.** One quiet re-read per 60 s while a venue is open, plus on tab return (not sooner than 15 s after the last); no refresh for hidden tabs; rows do not flash "loading"; a failed background read keeps the last answer.
+- **Truthful states.** An unpaid hold without an expiry reads "Unpaid hold", never "Confirmed".
+- **Verification.** Vitest 567 (was 545), `tsc` clean, build OK; full SQL suite on disposable `unisport-slice1h`: 31 files, 1,218 assertions, PASS. Migration applied to `slice1h` only; **not yet applied to `unisport-ui`** (needs approval).
+- **Pending (need user access):** apply the migration to `unisport-ui`; browser sign-in to verify cancel + the live waitlist-offer "Accept offer" (B-02); B-04 (UTC default date) and B-06 (label bio/preferences as browser-only) still to do.
