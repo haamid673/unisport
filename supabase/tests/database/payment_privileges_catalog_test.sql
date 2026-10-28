@@ -87,6 +87,9 @@ insert into expected_routine_exec values
   -- client RPC API
   ('create_booking(uuid,uuid,date)',         'authenticated'),
   ('cancel_booking(uuid)',                   'authenticated'),
+  ('admin_set_facility_status(uuid,facility_status)', 'authenticated'),
+  ('admin_find_user_by_email(text)',          'authenticated'),
+  ('admin_set_user_role(uuid,user_role)',     'authenticated'),
   ('join_waitlist(uuid,uuid,date)',          'authenticated'),
   ('leave_waitlist(uuid)',                   'authenticated'),
   ('accept_waitlist_offer(uuid)',            'authenticated'),

@@ -53,14 +53,14 @@ afterAll(() => {
 const owner: User = { id: 'u1', email: 'o@example.com', role: 'owner', city: 'X', name: 'Olivia' };
 
 describe('admin console and owner portal', () => {
-  it('the admin console renders an honest notice with no actions', () => {
-    const html = renderToStaticMarkup(<AdminDashboard />);
+  it('the admin console invents no data before the database answers', () => {
+    const admin: User = { id: 'a1', email: 'a@example.com', role: 'admin', city: 'X', name: 'Ada' };
+    const html = renderToStaticMarkup(<AdminDashboard user={admin} />);
 
-    expect(html).toContain('role="status"');
-    expect(html).toContain('Not available yet');
-    expect(html).not.toContain('<button');
-    expect(html).not.toContain('<input');
-    expect(html).not.toMatch(/LIVE SYNC|REVOKE|Approve|Reject/);
+    expect(html).toContain('Loading venues');
+    expect(html).not.toContain('Approve');
+    expect(html).not.toContain('Reject');
+    expect(html).not.toMatch(/₹|LIVE SYNC|REVOKE/);
   });
 
   it('the owner portal greets the owner and invents no data', () => {

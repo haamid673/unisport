@@ -62,7 +62,9 @@ shows an error with Retry; slots are never assumed available.
 **Facility approval** (migration `20261010180700`): a facility created by an
 owner must start with status `pending`; an insert with `active`, `suspended`
 or `rejected` is refused, so owners cannot self-approve. Only an admin can
-activate a facility (change `pending` to `active`).
+activate a facility (change `pending` to `active`), and admins do it in the
+Governance Center through `admin_set_facility_status()` (migration
+`20261026100000`).
 
 **Limits enforced by the database** (migrations `20261010180800`,
 `20261010180900`; the UI is not the control):
@@ -113,9 +115,9 @@ Accepting a waitlist offer also creates a hold, not a paid booking.
   and refunds do not exist either. `components/PaymentPage.tsx` and
   `services/bookingService.ts` are leftover mock code that is not
   reachable from the UI (`CUSTOMER_CHECKOUT_ENABLED = false`).
-- **Admin console:** `AdminDashboard` is an explicit placeholder with no
-  actions. Venue approval and role changes are made directly in the
-  database by an administrator.
+- **Admin audit trail and booking oversight:** the Governance Center
+  approves, rejects and suspends venues and changes roles, but does not keep
+  a history of those actions and has no booking/payment oversight views.
 - **Communities and events:** the screens show an empty state; groups and
   events are not stored in Supabase and cannot be created.
 - **Image uploads:** there is no storage bucket or upload UI. Venue images
@@ -131,15 +133,17 @@ A fresh local database has no facilities. To load a small realistic set:
 
 1. `supabase start`, then sign up in the app with the email you want as
    the facility owner (no fake users are ever inserted into `auth.users`).
-2. Promote that profile to `owner` (the role-guard trigger is lifted for
-   this one local statement):
+2. Make a first administrator once per local database (no trigger is
+   disabled; see the header of the script):
 
-   ```sql
-   alter table public.profiles disable trigger profiles_prevent_role_escalation;
-   update public.profiles set role = 'owner'
-     where id = (select id from auth.users where email = 'you@example.com');
-   alter table public.profiles enable trigger profiles_prevent_role_escalation;
+   ```bash
+   psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+        -v admin_email=admin@example.com \
+        -f supabase/dev/bootstrap_first_admin.sql
    ```
+
+   Then sign in as that administrator, open the Governance Center and look
+   up the owner's account by its full email to change its role to `owner`.
 3. Run the seed:
 
    ```bash
@@ -148,7 +152,8 @@ A fresh local database has no facilities. To load a small realistic set:
         -f supabase/dev/seed_dev_facilities.sql
    ```
 
-The script is idempotent (fixed ids), refuses to run unless the database
+The script is idempotent (fixed ids; a re-run never overwrites existing
+venues, so owner edits and admin decisions survive), refuses to run unless the database
 identifies itself as the local Supabase stack, and fails with a clear
 message when the owner does not exist or is not an owner. It is not
 `supabase/seed.sql`, so `supabase db reset` never runs it automatically.

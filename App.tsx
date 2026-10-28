@@ -104,7 +104,7 @@ const App: React.FC = () => {
   const renderDashboard = () => {
   switch (user.role) {
     case 'admin':
-      return <AdminDashboard />;
+      return <AdminDashboard user={user} />;
     case 'owner':
       return <OwnerDashboard user={user} />;
     default:
