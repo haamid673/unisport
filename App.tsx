@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { User, CommunityGroup } from './types';
+import { eventService } from './services/eventService';
+import { ROUTES, communityPath, homePath, pathForTab, redirectFor, tabForPath, type Tab } from './services/routes';
 import { userService } from './services/userService';
 import { authService } from './services/authService';
 import { supabaseConfigError } from './services/supabaseClient';
@@ -12,18 +15,33 @@ import AdminDashboard from './components/AdminDashboard';
 import Community from './components/Community';
 import CommunityDetail from './components/CommunityDetail';
 import UserProfile from './components/UserProfile';
-import PaymentPage from './components/PaymentPage';
+import NotFound from './components/NotFound';
 
 // Earlier prototype builds stored a simulated login, demo accounts and
 // mock records in this browser. None of it is honoured or shown.
 purgeLegacyDemoData();
 
+/** /community/:groupId: the group by id, or a not-found page. */
+const CommunityGroupRoute: React.FC<{ user: User; onBack: () => void; homeHref: string }> = ({
+  user,
+  onBack,
+  homeHref
+}) => {
+  const { groupId } = useParams();
+  const group = eventService.getAllGroups(true).find(g => g.id === groupId);
+
+  if (!group) {
+    return <NotFound homeHref={homeHref} title="Group not found" message="That community group does not exist or is not available." />;
+  }
+
+  return <CommunityDetail user={user} group={group} onBack={onBack} />;
+};
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [selectedCommunity, setSelectedCommunity] = useState<CommunityGroup | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
   const [isReady, setIsReady] = useState(false);
-  const [paymentData, setPaymentData] = useState<any | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -41,10 +59,9 @@ const App: React.FC = () => {
       (authenticated) => {
         const resolved = userService.setCurrentUser(authenticated);
 
-        setUser((previous) => {
-          if (!previous && resolved) setActiveTab('dashboard');
-          return resolved;
-        });
+        // The address bar is kept as it is: opening a deep link while
+        // signed out lands on that page after signing in.
+        setUser(resolved);
 
         if (resolved) setAuthError(null);
         setIsReady(true);
@@ -102,73 +119,62 @@ const App: React.FC = () => {
   if (!user) return <Auth notice={authError} />;
 
   const renderDashboard = () => {
-  switch (user.role) {
-    case 'admin':
-      return <AdminDashboard user={user} />;
-    case 'owner':
-      return <OwnerDashboard user={user} />;
-    default:
-      return (
-        <UserDashboard user={user} />
-      );
-  }
-};
+    switch (user.role) {
+      case 'admin':
+        return <AdminDashboard user={user} />;
+      case 'owner':
+        return <OwnerDashboard user={user} />;
+      default:
+        return <UserDashboard user={user} />;
+    }
+  };
 
+  // A wrong role, or /auth while signed in, is sent to its own home.
+  const redirect = redirectFor(user.role, location.pathname);
+  if (redirect) return <Navigate to={redirect} replace />;
+
+  const home = homePath(user.role);
+  const activeTab: Tab | '' = tabForPath(location.pathname) ?? '';
 
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans text-neutral-900">
-      <Navbar 
-        user={user} 
-        onLogout={handleLogout} 
-        activeTab={activeTab} 
-        setActiveTab={(tab) => {
-          setSelectedCommunity(null);
-          setActiveTab(tab);
-        }}
+      <Navbar
+        user={user}
+        onLogout={handleLogout}
+        activeTab={activeTab}
+        setActiveTab={(tab) => navigate(pathForTab(tab as Tab, user.role))}
       />
 
       <main className="flex-1">
-        {activeTab === 'dashboard' && renderDashboard()}
-        
-        {activeTab === 'community' && !selectedCommunity && (
-          <Community 
-            user={user} 
-            onSelectCommunity={setSelectedCommunity}
+        <Routes>
+          <Route path={ROUTES.home} element={renderDashboard()} />
+          <Route path={ROUTES.owner} element={renderDashboard()} />
+          <Route path={ROUTES.admin} element={renderDashboard()} />
+
+          <Route
+            path={ROUTES.community}
+            element={
+              <Community
+                user={user}
+                onSelectCommunity={(group: CommunityGroup) => navigate(communityPath(group.id))}
+              />
+            }
           />
-        )}
-
-        {activeTab === 'community' && selectedCommunity && (
-          <CommunityDetail
-            user={user}
-            group={selectedCommunity}
-            onBack={() => setSelectedCommunity(null)}
+          <Route
+            path={ROUTES.communityGroup}
+            element={<CommunityGroupRoute user={user} onBack={() => navigate(ROUTES.community)} homeHref={home} />}
           />
-        )}
 
-        {activeTab === 'profile' && (
-          <UserProfile user={user} onUpdate={handleProfileUpdate} />
-        )}
+          <Route path={ROUTES.profile} element={<UserProfile user={user} onUpdate={handleProfileUpdate} />} />
 
-        {activeTab === 'payment' && paymentData && (
-        <PaymentPage
-          data={paymentData}
-          onSuccess={() => {
-            setPaymentData(null);
-            setActiveTab('dashboard');
-          }}
-          onCancel={() => {
-            setPaymentData(null);
-            setActiveTab('dashboard');
-          }}
-          user={user}
-          onSuccessMessage={(msg) => setToast(msg)}
-        />
-      )}
-      {toast && (
-  <div className="fixed bottom-6 right-6 bg-black text-white px-6 py-3 rounded-lg shadow-xl z-50 animate-in fade-in slide-in-from-bottom-5">
-    {toast}
-  </div>
-)}
+          <Route path="*" element={<NotFound homeHref={home} />} />
+        </Routes>
+
+        {toast && (
+          <div className="fixed bottom-6 right-6 bg-black text-white px-6 py-3 rounded-lg shadow-xl z-50 animate-in fade-in slide-in-from-bottom-5">
+            {toast}
+          </div>
+        )}
       </main>
 
       <footer className="bg-neutral-900 text-white border-t border-neutral-800 py-12 mt-12">

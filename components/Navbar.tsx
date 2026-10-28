@@ -110,6 +110,9 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, activeTab, setActiveTab
             >
               {dashboardLabel}
             </button>
+            {/* Same screens as the desktop menu: only players have these two */}
+            {user.role === 'user' && (
+              <>
             <button 
               onClick={() => handleTabClick('community')}
               className={`block w-full text-left px-4 py-3 text-sm font-black uppercase tracking-widest rounded-lg transition-colors ${activeTab === 'community' ? 'bg-orange-50 text-orange-600' : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900'}`}
@@ -122,6 +125,8 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, activeTab, setActiveTab
             >
               Profile
             </button>
+              </>
+            )}
             
             <div className="pt-4 mt-4 border-t border-neutral-100">
               <button 
