@@ -150,7 +150,8 @@ describe('reservation flow', () => {
   });
 
   it('disables the button unless the slot is bookable and nothing is pending', () => {
-    expect(activeSource).toMatch(/disabled=\{!canBook\}/);
+    // a plain slot: disabled unless bookable (a live offer has its own rule, tested below)
+    expect(activeSource).toMatch(/disabled=\{offerAction\.visible \? !canAcceptOffer : !canBook\}/);
     expect(activeSource).toMatch(
       /const canBook = action\.bookable && !isSubmitting;/
     );
@@ -299,3 +300,57 @@ describe('waitlist flow', () => {
   });
 });
 
+
+describe('slot row: the holder of a live waitlist offer', () => {
+  const row = activeSource.slice(
+    activeSource.indexOf('const action = getSlotAction('),
+    activeSource.indexOf('{waitlistAction.visible')
+  );
+
+  it('reads its own LIVE offer from its waitlist entries, judged by the clock', () => {
+    expect(row).toMatch(
+      /getOfferAction\(\s*s,\s*availability,\s*activeWaitlist,\s*selectedDate,\s*new Date\(clock\)\s*\)/
+    );
+    // activeWaitlist only keeps waiting/offered entries by the clock
+    expect(activeSource).toMatch(
+      /const activeWaitlist: WaitlistEntry\[\][\s\S]*?effectiveWaitlistStatus\(e, new Date\(clock\)\)/
+    );
+  });
+
+  it('takes the offer through the existing accept handler, not a second booking path', () => {
+    expect(row).toMatch(/if \(offerAction\.visible && offerEntry\) handleAcceptOffer\(offerEntry\);\s*else handleBook\(s\);/);
+    // the only callers of the accept RPC wrapper are the shared handler
+    expect((activeSource.match(/waitlistRepository\s*\.acceptOffer\(/g) ?? []).length).toBe(1);
+    expect((activeSource.match(/bookingRepository\.createBooking\(/g) ?? []).length).toBe(1);
+  });
+
+  it('says "Accept offer" with the offer expiry, accessibly, and is disabled while another action runs', () => {
+    expect(row).toMatch(/offerAction\.label/);
+    expect(row).toMatch(/Offer until \{offerUntil\}/);
+    expect(row).toMatch(/offerAction\.ariaLabel/);
+    expect(row).toMatch(/open until \$\{offerUntil\}/);
+    expect(row).toMatch(/canAcceptOffer = offerAction\.visible && !isSubmitting && !waitlistBusy/);
+    expect(row).toMatch(/disabled=\{offerAction\.visible \? !canAcceptOffer : !canBook\}/);
+    // the class choice is parenthesised (a bare ternary chain would yield a boolean)
+    expect(row).toMatch(/\(offerAction\.visible \? canAcceptOffer : canBook\)\s*\?/);
+  });
+
+  it('does not draw a disabled "On waitlist" next to an Accept offer', () => {
+    expect(activeSource).toMatch(/\{waitlistAction\.visible && !offerAction\.visible && \(/);
+  });
+
+  it('re-reads the waitlist and availability once when a live offer drops, without polling', () => {
+    expect(activeSource).toMatch(/isLiveOffer\(e, new Date\(clock\)\)/);
+    expect(activeSource).toMatch(/liveOfferCount < offerScope\.current\.count/);
+    const effect = activeSource.slice(
+      activeSource.indexOf('const offerScope = useRef'),
+      activeSource.indexOf('// A finished notice belongs to the context')
+    );
+    expect(effect).toMatch(/setWaitlistReloadKey\(k => k \+ 1\)/);
+    expect(effect).toMatch(/setAvailabilityReloadKey\(k => k \+ 1\)/);
+    expect(effect).not.toMatch(/setInterval|setTimeout/);
+    // the existing cadence is unchanged: a 60 s waitlist poll and a 15 s clock tick
+    expect(activeSource).toMatch(/setInterval\(\(\) => setWaitlistReloadKey\(k => k \+ 1\), 60_000\)/);
+    expect(activeSource).toMatch(/setInterval\(\(\) => setClock\(Date\.now\(\)\), 15_000\)/);
+  });
+});
