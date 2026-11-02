@@ -89,7 +89,8 @@ values
   ('public.community_groups'),
   ('public.group_members'),
   ('public.community_events'),
-  ('public.event_participants');
+  ('public.event_participants'),
+  ('public.notifications');
 
 
 -- ============================================================

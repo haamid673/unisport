@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
+import NotificationBell from './NotificationBell';
 
 interface NavbarProps {
   user: User | null;
@@ -63,6 +64,7 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, activeTab, setActiveTab
           </div>
 
           <div className="hidden md:flex items-center space-x-6">
+            <NotificationBell userId={user.id} />
             <div 
               className="text-right hidden sm:block"
             >
@@ -81,7 +83,8 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, activeTab, setActiveTab
           </div>
 
           {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center">
+          <div className="md:hidden flex items-center gap-1">
+            <NotificationBell userId={user.id} />
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               className="text-neutral-900 hover:text-orange-600 focus:outline-none p-2"

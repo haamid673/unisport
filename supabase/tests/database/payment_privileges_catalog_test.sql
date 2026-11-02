@@ -102,6 +102,8 @@ insert into expected_routine_exec values
   ('admin_list_community_events(approval_status)', 'authenticated'),
   ('admin_set_group_status(uuid,approval_status)', 'authenticated'),
   ('admin_set_event_status(uuid,approval_status)', 'authenticated'),
+  ('get_my_notifications(integer)',          'authenticated'),
+  ('mark_notifications_read(uuid[])',        'authenticated'),
   ('join_waitlist(uuid,uuid,date)',          'authenticated'),
   ('leave_waitlist(uuid)',                   'authenticated'),
   ('accept_waitlist_offer(uuid)',            'authenticated'),

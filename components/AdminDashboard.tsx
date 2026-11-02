@@ -401,71 +401,71 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
 
             {others.length > 0 && <ul className="space-y-3">{others.map(renderVenue)}</ul>}
           </section>
-        </div>
 
-        <section className="lg:col-span-2 bg-white p-6 rounded-xl border-2 border-neutral-100" aria-labelledby="community-heading">
-          <h3 id="community-heading" className="font-black uppercase text-lg mb-4">
-            Community requests
-          </h3>
+          <section className="bg-white p-6 rounded-xl border-2 border-neutral-100" aria-labelledby="community-heading">
+            <h3 id="community-heading" className="font-black uppercase text-lg mb-4">
+              Community requests
+            </h3>
 
-          {communityView.phase === 'loading' && (
-            <p className="text-neutral-400 text-xs font-bold uppercase">Loading requests…</p>
-          )}
+            {communityView.phase === 'loading' && (
+              <p className="text-neutral-400 text-xs font-bold uppercase">Loading requests…</p>
+            )}
 
-          {communityView.phase === 'error' && (
-            <div role="alert" className="p-4 bg-red-50 border border-red-200">
-              <p className="text-xs font-bold text-red-700">{communityView.message}</p>
-              <button onClick={() => setReloadKey(k => k + 1)} className={`${secondaryButton} mt-3`}>
-                Retry
-              </button>
-            </div>
-          )}
+            {communityView.phase === 'error' && (
+              <div role="alert" className="p-4 bg-red-50 border border-red-200">
+                <p className="text-xs font-bold text-red-700">{communityView.message}</p>
+                <button onClick={() => setReloadKey(k => k + 1)} className={`${secondaryButton} mt-3`}>
+                  Retry
+                </button>
+              </div>
+            )}
 
-          {communityView.phase === 'ready' && communityView.groups.length === 0 && communityView.events.length === 0 && (
-            <p className="text-neutral-400 text-xs font-bold uppercase">No communities or events are waiting for approval.</p>
-          )}
+            {communityView.phase === 'ready' && communityView.groups.length === 0 && communityView.events.length === 0 && (
+              <p className="text-neutral-400 text-xs font-bold uppercase">No communities or events are waiting for approval.</p>
+            )}
 
-          {communityView.phase === 'ready' && communityView.groups.length > 0 && (
-            <>
-              <p className={labelClass}>Communities</p>
-              <ul className="space-y-3 mb-6">
-                {communityView.groups.map(g => (
-                  <li key={g.id} className="p-4 bg-neutral-50 border border-neutral-200 rounded-lg">
-                    <p className="text-sm font-black uppercase italic">{g.name}</p>
-                    <p className="text-xs text-neutral-500 uppercase">
-                      {g.sport} · {g.city} · by {g.createdByEmail ?? 'unknown'}
-                    </p>
-                    {g.description && <p className="mt-1 text-xs text-neutral-600">{g.description}</p>}
-                    {renderDecision(`grp:${g.id}`, 'community', status => decideGroup(g, status))}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-
-          {communityView.phase === 'ready' && communityView.events.length > 0 && (
-            <>
-              <p className={labelClass}>Events</p>
-              <ul className="space-y-3">
-                {communityView.events.map(ev => (
-                  <li key={ev.id} className="p-4 bg-neutral-50 border border-neutral-200 rounded-lg">
-                    <p className="text-sm font-black uppercase italic">{ev.title}</p>
-                    <p className="text-xs text-neutral-500 uppercase">
-                      {ev.groupName} · {ev.facilityName} · {ev.date} {ev.time}
-                      {ev.capacity ? ` · ${ev.capacity} places` : ''} · by {ev.createdByEmail ?? 'unknown'}
-                    </p>
-                    {ev.groupStatus !== 'approved' && (
-                      <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
-                        Its community is not approved yet, so players will not see this event until it is.
+            {communityView.phase === 'ready' && communityView.groups.length > 0 && (
+              <>
+                <p className={labelClass}>Communities</p>
+                <ul className="space-y-3 mb-6">
+                  {communityView.groups.map(g => (
+                    <li key={g.id} className="p-4 bg-neutral-50 border border-neutral-200 rounded-lg">
+                      <p className="text-sm font-black uppercase italic">{g.name}</p>
+                      <p className="text-xs text-neutral-500 uppercase">
+                        {g.sport} · {g.city} · by {g.createdByEmail ?? 'unknown'}
                       </p>
-                    )}
-                    {renderDecision(`evt:${ev.id}`, 'event', status => decideEvent(ev, status))}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </section>
+                      {g.description && <p className="mt-1 text-xs text-neutral-600">{g.description}</p>}
+                      {renderDecision(`grp:${g.id}`, 'community', status => decideGroup(g, status))}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+
+            {communityView.phase === 'ready' && communityView.events.length > 0 && (
+              <>
+                <p className={labelClass}>Events</p>
+                <ul className="space-y-3">
+                  {communityView.events.map(ev => (
+                    <li key={ev.id} className="p-4 bg-neutral-50 border border-neutral-200 rounded-lg">
+                      <p className="text-sm font-black uppercase italic">{ev.title}</p>
+                      <p className="text-xs text-neutral-500 uppercase">
+                        {ev.groupName} · {ev.facilityName} · {ev.date} {ev.time}
+                        {ev.capacity ? ` · ${ev.capacity} places` : ''} · by {ev.createdByEmail ?? 'unknown'}
+                      </p>
+                      {ev.groupStatus !== 'approved' && (
+                        <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                          Its community is not approved yet, so players will not see this event until it is.
+                        </p>
+                      )}
+                      {renderDecision(`evt:${ev.id}`, 'event', status => decideEvent(ev, status))}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </section>
+        </div>
 
         <section
           className="bg-white p-6 rounded-xl border-2 border-neutral-100 h-fit"
