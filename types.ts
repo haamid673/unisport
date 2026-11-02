@@ -80,33 +80,6 @@ export interface Booking {
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
-export interface CommunityGroup {
-  id: string;
-  name: string;
-  sport: string;
-  city: string;
-  createdBy: string;
-  status: ApprovalStatus;
-  members: string[];
-  imageUrl?: string;
-}
-
-
-export interface CommunityEvent {
-  id: string;
-  groupId?: string; // Optional for now to support legacy events
-  title: string;
-  date: string;
-  time: string;
-  facilityId: string;
-  createdBy: string;
-  participants: string[];
-  status: ApprovalStatus;
-  imageUrl?: string;
-  city?: string;
-  capacity?: number;
-}
-
 export interface DemandPrediction {
   demandLevel: 'Low' | 'Medium' | 'High';
   predictedOccupancy: number;

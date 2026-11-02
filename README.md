@@ -108,6 +108,18 @@ authority; the UI only decides what to show):
 **A reservation is an unpaid 10-minute hold.** It expires automatically.
 Accepting a waitlist offer also creates a hold, not a paid booking.
 
+## Communities and events
+
+Stored in Supabase (migration `20261027100000_community.sql`). Players can
+start a community, join and leave, and members of an approved community can
+create events (at a live venue in the community's city, with an optional
+capacity) and join them. Capacity is enforced by the database, also under
+simultaneous joins. A player's new community or event is `pending` until an
+administrator approves it in the Governance Center; administrators' own are
+approved at once. The four tables are closed to clients: everything goes
+through `SECURITY DEFINER` functions, so people see counts but never member
+lists.
+
 ## Not implemented yet
 
 - **Payments and booking confirmation:** there is no payment provider and
@@ -118,8 +130,6 @@ Accepting a waitlist offer also creates a hold, not a paid booking.
 - **Admin audit trail and booking oversight:** the Governance Center
   approves, rejects and suspends venues and changes roles, but does not keep
   a history of those actions and has no booking/payment oversight views.
-- **Communities and events:** the screens show an empty state; groups and
-  events are not stored in Supabase and cannot be created.
 - **Image uploads:** there is no storage bucket or upload UI. Venue images
   are bundled defaults (`public/images`) or external stock photos.
 - **Notifications:** none (no email, SMS or push); offers and holds are

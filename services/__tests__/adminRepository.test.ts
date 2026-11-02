@@ -10,6 +10,12 @@ import {
   FIND_USER_RPC,
   SET_USER_ROLE_RPC,
   parseAdminUser,
+  mapAdminEvent,
+  mapAdminGroup,
+  LIST_GROUPS_RPC,
+  LIST_EVENTS_RPC,
+  SET_GROUP_STATUS_RPC,
+  SET_EVENT_STATUS_RPC,
   toAdminError
 } from '../adminRepository';
 
@@ -195,5 +201,57 @@ describe('toAdminError', () => {
   it('a thrown network error from the RPC becomes a network AdminError', async () => {
     const { repo } = fakeClient({ rpc: () => { throw new TypeError('Failed to fetch'); } });
     expect((await failure(repo.setFacilityStatus(FAC, 'active'))).kind).toBe('network');
+  });
+});
+
+describe('community requests', () => {
+  const groupRow = { id: FAC, name: 'Smashers', sport: 'Badminton', city: 'Trivandrum', description: null,
+    status: 'pending', created_by_email: 'a@example.com', member_count: 1, created_at: '2026-10-20T10:00:00Z' };
+  const eventRow = { id: ID, group_name: 'Smashers', group_status: 'approved', title: 'Doubles', event_date: '2026-11-01',
+    event_time: '18:30:00', facility_name: 'Court', capacity: null, status: 'pending', created_by_email: null,
+    created_at: '2026-10-20T10:00:00Z' };
+
+  it('lists the pending queue through the admin functions', async () => {
+    const g = fakeClient({ rpc: { data: [groupRow] } });
+    expect(await g.repo.loadCommunityGroups()).toEqual([
+      { id: FAC, name: 'Smashers', sport: 'Badminton', city: 'Trivandrum', description: null, status: 'pending',
+        createdByEmail: 'a@example.com', memberCount: 1, createdAt: '2026-10-20T10:00:00Z' }
+    ]);
+    expect(g.rpc).toHaveBeenCalledWith(LIST_GROUPS_RPC, { p_status: 'pending' });
+
+    const e = fakeClient({ rpc: { data: [eventRow] } });
+    expect((await e.repo.loadCommunityEvents())[0]).toMatchObject({ title: 'Doubles', time: '18:30', capacity: null, createdByEmail: null });
+    expect(e.rpc).toHaveBeenCalledWith(LIST_EVENTS_RPC, { p_status: 'pending' });
+    expect(e.from).not.toHaveBeenCalled();
+  });
+
+  it('refuses malformed rows and a non-array answer with a safe message', async () => {
+    expect(() => mapAdminGroup({ ...groupRow, status: 'archived' })).toThrow(AdminError);
+    expect(() => mapAdminEvent({ ...eventRow, group_status: 'x' })).toThrow(AdminError);
+    expect((await failure(fakeClient({ rpc: { data: null } }).repo.loadCommunityGroups())).message).toBe(ADMIN_MESSAGES.communityLoadFailed);
+    const odd = await failure(fakeClient({ rpc: { error: { code: 'XX000', message: 'secret' } } }).repo.loadCommunityEvents());
+    expect(odd.message).toBe(ADMIN_MESSAGES.communityLoadFailed);
+    expect((await failure(fakeClient({ rpc: { error: { code: '42501', message: 'x' } } }).repo.loadCommunityGroups())).kind).toBe('forbidden');
+  });
+
+  it('decides a group or an event and returns only what the database stored', async () => {
+    const g = fakeClient({ rpc: { data: 'approved' } });
+    await expect(g.repo.setGroupStatus(FAC, 'approved')).resolves.toBe('approved');
+    expect(g.rpc).toHaveBeenCalledWith(SET_GROUP_STATUS_RPC, { p_group_id: FAC, p_status: 'approved' });
+    const e = fakeClient({ rpc: { data: 'rejected' } });
+    await expect(e.repo.setEventStatus(ID, 'rejected')).resolves.toBe('rejected');
+    expect(e.rpc).toHaveBeenCalledWith(SET_EVENT_STATUS_RPC, { p_event_id: ID, p_status: 'rejected' });
+    expect((await failure(fakeClient({ rpc: { data: 'pending' } }).repo.setGroupStatus(FAC, 'approved'))).kind).toBe('unknown');
+  });
+
+  it('refuses bad input first and maps not-found and a taken name', async () => {
+    const { repo, rpc } = fakeClient();
+    expect((await failure(repo.setGroupStatus('x', 'approved'))).kind).toBe('invalid');
+    expect((await failure(repo.setEventStatus(ID, 'archived' as never))).kind).toBe('invalid');
+    expect(rpc).not.toHaveBeenCalled();
+    const nf = await failure(fakeClient({ rpc: { error: { code: 'P0002', message: 'x' } } }).repo.setEventStatus(ID, 'approved'));
+    expect(nf.message).toBe(ADMIN_MESSAGES.eventNotFound);
+    const dup = await failure(fakeClient({ rpc: { error: { code: 'UC005', message: 'x' } } }).repo.setGroupStatus(FAC, 'approved'));
+    expect(dup.message).toBe(ADMIN_MESSAGES.groupNameTaken);
   });
 });

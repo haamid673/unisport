@@ -58,4 +58,16 @@ describe('AdminDashboard', () => {
     expect(source).toContain('Accounts cannot be browsed');
     expect(source).not.toMatch(/loadUsers|listUsers/);
   });
+
+  it('decides communities and events only through the repository, with a confirm step', () => {
+    expect(source).toMatch(/await adminRepository\.setGroupStatus/);
+    expect(source).toMatch(/await adminRepository\.setEventStatus/);
+    expect(source).toContain('Yes, approve');
+    expect(source).toContain('Yes, reject');
+    expect(source).toContain('No communities or events are waiting for approval.');
+  });
+
+  it('says when an event\'s community is not approved yet', () => {
+    expect(source).toContain('Its community is not approved yet');
+  });
 });

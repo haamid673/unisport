@@ -3,8 +3,11 @@ import {
   adminRepository,
   toAdminError,
   USER_ROLES,
+  type AdminEvent,
   type AdminFacility,
+  type AdminGroup,
   type AdminUser,
+  type ApprovalDecision,
   type UserRole
 } from '../services/adminRepository';
 import { describeFacilityStatus, type FacilityRecordStatus } from '../services/ownerFacilityRepository';
@@ -96,6 +99,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   >({ phase: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
 
+  const [communityView, setCommunityView] = useState<
+    | { phase: 'loading' }
+    | { phase: 'error'; message: string }
+    | { phase: 'ready'; groups: AdminGroup[]; events: AdminEvent[] }
+  >({ phase: 'loading' });
+
   const [notice, setNotice] = useState<Notice>(null);
   // At most one confirmation open at a time, and one action in flight.
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
@@ -131,6 +140,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
     };
   }, [user.id, reloadKey]);
 
+  // Communities and events awaiting a decision.
+  useEffect(() => {
+    let cancelled = false;
+
+    setCommunityView(prev => (prev.phase === 'ready' ? prev : { phase: 'loading' }));
+
+    Promise.all([adminRepository.loadCommunityGroups('pending'), adminRepository.loadCommunityEvents('pending')])
+      .then(([groups, events]) => {
+        if (!cancelled) setCommunityView({ phase: 'ready', groups, events });
+      })
+      .catch(err => {
+        if (!cancelled) setCommunityView({ phase: 'error', message: toAdminError(err).message });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user.id, reloadKey]);
+
   // One administrative action at a time. Success is reported only from
   // the database's answer, and the lists are re-read whatever happened.
   const run = (key: string, action: () => Promise<string>) => {
@@ -155,6 +183,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
     run(`fac:${facility.id}:${status}`, async () => {
       await adminRepository.setFacilityStatus(facility.id, status);
       return `${facility.name} ${ACTIONS[status].done}`;
+    });
+
+  const decideGroup = (group: AdminGroup, status: ApprovalDecision) =>
+    run(`grp:${group.id}:${status}`, async () => {
+      await adminRepository.setGroupStatus(group.id, status);
+      return `${group.name} was ${status === 'approved' ? 'approved' : 'rejected'}.`;
+    });
+
+  const decideEvent = (event: AdminEvent, status: ApprovalDecision) =>
+    run(`evt:${event.id}:${status}`, async () => {
+      await adminRepository.setEventStatus(event.id, status);
+      return `${event.title} was ${status === 'approved' ? 'approved' : 'rejected'}.`;
     });
 
   const search = async () => {
@@ -251,6 +291,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
     </li>
   );
 
+  // Approve / Reject with a confirm step, for a community or an event.
+  const renderDecision = (
+    prefix: string,
+    noun: 'community' | 'event',
+    decide: (status: ApprovalDecision) => void
+  ) => (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      {(['approved', 'rejected'] as const).map(status => {
+        const key = `${prefix}:${status}`;
+        const approve = status === 'approved';
+
+        return confirmKey === key ? (
+          <React.Fragment key={key}>
+            <p className="w-full text-[10px] font-bold uppercase tracking-wide text-neutral-600">
+              {approve
+                ? `Approve this ${noun}? It becomes visible to players.`
+                : `Reject this ${noun}? Its creator will see it as rejected.`}
+            </p>
+            <button type="button" disabled={busy} onClick={() => decide(status)} className={approve ? primaryButton + ' !py-2 !px-4 !text-[10px]' : dangerButton}>
+              {approve ? 'Yes, approve' : 'Yes, reject'}
+            </button>
+            <button type="button" onClick={() => setConfirmKey(null)} className={secondaryButton}>
+              Keep as is
+            </button>
+          </React.Fragment>
+        ) : confirmKey?.startsWith(`${prefix}:`) ? null : (
+          <button key={key} type="button" disabled={busy} aria-busy={busyKey === key} onClick={() => setConfirmKey(key)} className={secondaryButton}>
+            {busyKey === key ? 'Working…' : approve ? 'Approve' : 'Reject'}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   const found = lookup.phase === 'found' ? lookup.account : null;
   const isSelf = found?.id === user.id;
   const roleKey = found ? `role:${found.id}` : '';
@@ -328,6 +402,70 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
             {others.length > 0 && <ul className="space-y-3">{others.map(renderVenue)}</ul>}
           </section>
         </div>
+
+        <section className="lg:col-span-2 bg-white p-6 rounded-xl border-2 border-neutral-100" aria-labelledby="community-heading">
+          <h3 id="community-heading" className="font-black uppercase text-lg mb-4">
+            Community requests
+          </h3>
+
+          {communityView.phase === 'loading' && (
+            <p className="text-neutral-400 text-xs font-bold uppercase">Loading requests…</p>
+          )}
+
+          {communityView.phase === 'error' && (
+            <div role="alert" className="p-4 bg-red-50 border border-red-200">
+              <p className="text-xs font-bold text-red-700">{communityView.message}</p>
+              <button onClick={() => setReloadKey(k => k + 1)} className={`${secondaryButton} mt-3`}>
+                Retry
+              </button>
+            </div>
+          )}
+
+          {communityView.phase === 'ready' && communityView.groups.length === 0 && communityView.events.length === 0 && (
+            <p className="text-neutral-400 text-xs font-bold uppercase">No communities or events are waiting for approval.</p>
+          )}
+
+          {communityView.phase === 'ready' && communityView.groups.length > 0 && (
+            <>
+              <p className={labelClass}>Communities</p>
+              <ul className="space-y-3 mb-6">
+                {communityView.groups.map(g => (
+                  <li key={g.id} className="p-4 bg-neutral-50 border border-neutral-200 rounded-lg">
+                    <p className="text-sm font-black uppercase italic">{g.name}</p>
+                    <p className="text-xs text-neutral-500 uppercase">
+                      {g.sport} · {g.city} · by {g.createdByEmail ?? 'unknown'}
+                    </p>
+                    {g.description && <p className="mt-1 text-xs text-neutral-600">{g.description}</p>}
+                    {renderDecision(`grp:${g.id}`, 'community', status => decideGroup(g, status))}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {communityView.phase === 'ready' && communityView.events.length > 0 && (
+            <>
+              <p className={labelClass}>Events</p>
+              <ul className="space-y-3">
+                {communityView.events.map(ev => (
+                  <li key={ev.id} className="p-4 bg-neutral-50 border border-neutral-200 rounded-lg">
+                    <p className="text-sm font-black uppercase italic">{ev.title}</p>
+                    <p className="text-xs text-neutral-500 uppercase">
+                      {ev.groupName} · {ev.facilityName} · {ev.date} {ev.time}
+                      {ev.capacity ? ` · ${ev.capacity} places` : ''} · by {ev.createdByEmail ?? 'unknown'}
+                    </p>
+                    {ev.groupStatus !== 'approved' && (
+                      <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                        Its community is not approved yet, so players will not see this event until it is.
+                      </p>
+                    )}
+                    {renderDecision(`evt:${ev.id}`, 'event', status => decideEvent(ev, status))}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
 
         <section
           className="bg-white p-6 rounded-xl border-2 border-neutral-100 h-fit"

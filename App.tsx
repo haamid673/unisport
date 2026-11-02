@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { User, CommunityGroup } from './types';
-import { eventService } from './services/eventService';
+import { User } from './types';
 import { ROUTES, communityPath, homePath, pathForTab, redirectFor, tabForPath, type Tab } from './services/routes';
 import { userService } from './services/userService';
 import { authService } from './services/authService';
@@ -21,20 +20,14 @@ import NotFound from './components/NotFound';
 // mock records in this browser. None of it is honoured or shown.
 purgeLegacyDemoData();
 
-/** /community/:groupId: the group by id, or a not-found page. */
+/** /community/:groupId: the group is looked up (and its absence reported) by the screen itself. */
 const CommunityGroupRoute: React.FC<{ user: User; onBack: () => void; homeHref: string }> = ({
   user,
   onBack,
   homeHref
 }) => {
   const { groupId } = useParams();
-  const group = eventService.getAllGroups(true).find(g => g.id === groupId);
-
-  if (!group) {
-    return <NotFound homeHref={homeHref} title="Group not found" message="That community group does not exist or is not available." />;
-  }
-
-  return <CommunityDetail user={user} group={group} onBack={onBack} />;
+  return <CommunityDetail user={user} groupId={groupId ?? ''} onBack={onBack} homeHref={homeHref} />;
 };
 
 const App: React.FC = () => {
@@ -156,7 +149,7 @@ const App: React.FC = () => {
             element={
               <Community
                 user={user}
-                onSelectCommunity={(group: CommunityGroup) => navigate(communityPath(group.id))}
+                onSelectCommunity={group => navigate(communityPath(group.id))}
               />
             }
           />

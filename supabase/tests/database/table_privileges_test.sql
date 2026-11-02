@@ -76,6 +76,21 @@ values
   ('public.payment_events'),
   ('public.reconciliation_runs');
 
+-- Community tables: closed to clients, reached only through SECURITY
+-- DEFINER functions. Their client privileges and policies are tested in
+-- community_test.sql; they are listed here only so the catalogue check
+-- below knows them.
+create temp table h1_community (
+  tbl text primary key
+);
+
+insert into h1_community (tbl)
+values
+  ('public.community_groups'),
+  ('public.group_members'),
+  ('public.community_events'),
+  ('public.event_participants');
+
 
 -- ============================================================
 -- 1. The model covers every table in public
@@ -88,7 +103,7 @@ select is(
    where n.nspname = 'public'
      and c.relkind in ('r', 'p', 'v', 'm', 'f')),
   (select string_agg(substr(tbl, 8), ',' order by tbl)
-   from (select tbl from h1_expected union all select tbl from h1_server_only) m),
+   from (select tbl from h1_expected union all select tbl from h1_server_only union all select tbl from h1_community) m),
   'public contains exactly the application tables this model covers'
 );
 

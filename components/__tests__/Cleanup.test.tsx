@@ -9,7 +9,6 @@ import AdminDashboard from '../AdminDashboard';
 import OwnerDashboard from '../OwnerDashboard';
 import { userService } from '../../services/userService';
 import { facilityService } from '../../services/facilityService';
-import { eventService } from '../../services/eventService';
 import type { User } from '../../types';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
@@ -97,8 +96,8 @@ describe('no demo data or credentials in the application', () => {
   it('keeps no mock catalog, accounts or community seed in memory', () => {
     expect(facilityService.getAllFacilities(true)).toEqual([]);
     expect(facilityService.getAllSlots()).toEqual([]);
-    expect(eventService.getAllGroups(true)).toEqual([]);
-    expect(eventService.getAllEvents(true)).toEqual([]);
+    // community data lives in the database; the browser-local prototype is gone
+    expect(existsSync(join(root, 'services/eventService.ts'))).toBe(false);
     expect((userService as Record<string, unknown>).getAllUsers).toBeUndefined();
   });
 });

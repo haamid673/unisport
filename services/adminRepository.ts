@@ -25,6 +25,13 @@ import type { FacilityRecordStatus } from './ownerFacilityRepository';
 export const SET_FACILITY_STATUS_RPC = 'admin_set_facility_status';
 export const FIND_USER_RPC = 'admin_find_user_by_email';
 export const SET_USER_ROLE_RPC = 'admin_set_user_role';
+export const LIST_GROUPS_RPC = 'admin_list_community_groups';
+export const LIST_EVENTS_RPC = 'admin_list_community_events';
+export const SET_GROUP_STATUS_RPC = 'admin_set_group_status';
+export const SET_EVENT_STATUS_RPC = 'admin_set_event_status';
+
+export type ApprovalDecision = 'pending' | 'approved' | 'rejected';
+const APPROVAL_DECISIONS: readonly ApprovalDecision[] = ['pending', 'approved', 'rejected'];
 
 export const ADMIN_FACILITY_LIMIT = 200;
 
@@ -75,6 +82,32 @@ export interface AdminUser {
   role: UserRole;
 }
 
+export interface AdminGroup {
+  id: string;
+  name: string;
+  sport: string;
+  city: string;
+  description: string | null;
+  status: ApprovalDecision;
+  createdByEmail: string | null;
+  memberCount: number;
+  createdAt: string;
+}
+
+export interface AdminEvent {
+  id: string;
+  groupName: string;
+  groupStatus: ApprovalDecision;
+  title: string;
+  date: string;
+  time: string;
+  facilityName: string;
+  capacity: number | null;
+  status: ApprovalDecision;
+  createdByEmail: string | null;
+  createdAt: string;
+}
+
 export const ADMIN_MESSAGES = {
   unauthenticated: 'Your session has expired. Please sign in again.',
   forbidden: 'Only administrators can do this.',
@@ -86,6 +119,10 @@ export const ADMIN_MESSAGES = {
   network: 'Could not reach the service. Check the current state before trying again.',
   unknown: 'That did not work. Check the current state before trying again.',
   loadFailed: 'Could not load the venues. Please try again.',
+  communityLoadFailed: 'Could not load the community requests. Please try again.',
+  groupNotFound: 'That community no longer exists. Refresh the list.',
+  eventNotFound: 'That event no longer exists. Refresh the list.',
+  groupNameTaken: 'Another community with that name already exists in this city, so this one cannot be approved.',
   emailRequired: 'Enter the full email address of the account.'
 } as const;
 
@@ -93,7 +130,10 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
 
 /** Map a PostgREST/Postgres error to a safe AdminError. Never leaks raw text. */
-export function toAdminError(error: unknown, subject: 'facility' | 'user' = 'facility'): AdminError {
+export function toAdminError(
+  error: unknown,
+  subject: 'facility' | 'user' | 'group' | 'event' = 'facility'
+): AdminError {
   if (error instanceof AdminError) return error;
 
   const e = asRecord(error);
@@ -109,12 +149,20 @@ export function toAdminError(error: unknown, subject: 'facility' | 'user' = 'fac
     case 'P0002':
       return new AdminError(
         'not_found',
-        subject === 'user' ? ADMIN_MESSAGES.userNotFound : ADMIN_MESSAGES.facilityNotFound
+        subject === 'user'
+          ? ADMIN_MESSAGES.userNotFound
+          : subject === 'group'
+          ? ADMIN_MESSAGES.groupNotFound
+          : subject === 'event'
+          ? ADMIN_MESSAGES.eventNotFound
+          : ADMIN_MESSAGES.facilityNotFound
       );
     case 'UB007':
       return new AdminError('rule', ADMIN_MESSAGES.ownRole);
     case 'UB008':
       return new AdminError('rule', ADMIN_MESSAGES.lastAdmin);
+    case 'UC005':
+      return new AdminError('rule', ADMIN_MESSAGES.groupNameTaken);
     case '22023':
     case '22P02':
       return new AdminError('invalid', ADMIN_MESSAGES.invalid);
@@ -191,6 +239,68 @@ export function parseAdminUser(data: unknown): AdminUser | null {
   };
 }
 
+const asCount = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null;
+
+export function mapAdminGroup(row: unknown): AdminGroup {
+  const r = asRecord(row);
+  const memberCount = asCount(r?.member_count);
+  if (
+    typeof r?.id !== 'string' ||
+    typeof r.name !== 'string' ||
+    typeof r.sport !== 'string' ||
+    typeof r.city !== 'string' ||
+    typeof r.created_at !== 'string' ||
+    memberCount === null ||
+    !APPROVAL_DECISIONS.includes(r.status as ApprovalDecision)
+  ) {
+    throw new AdminError('unknown', ADMIN_MESSAGES.communityLoadFailed);
+  }
+  return {
+    id: r.id,
+    name: r.name,
+    sport: r.sport,
+    city: r.city,
+    description: typeof r.description === 'string' ? r.description : null,
+    status: r.status as ApprovalDecision,
+    createdByEmail: typeof r.created_by_email === 'string' ? r.created_by_email : null,
+    memberCount,
+    createdAt: r.created_at
+  };
+}
+
+export function mapAdminEvent(row: unknown): AdminEvent {
+  const r = asRecord(row);
+  const capacity = r?.capacity === null ? null : asCount(r?.capacity);
+  if (
+    typeof r?.id !== 'string' ||
+    typeof r.group_name !== 'string' ||
+    typeof r.title !== 'string' ||
+    typeof r.event_date !== 'string' ||
+    typeof r.event_time !== 'string' ||
+    typeof r.facility_name !== 'string' ||
+    typeof r.created_at !== 'string' ||
+    capacity === undefined ||
+    !APPROVAL_DECISIONS.includes(r.status as ApprovalDecision) ||
+    !APPROVAL_DECISIONS.includes(r.group_status as ApprovalDecision)
+  ) {
+    throw new AdminError('unknown', ADMIN_MESSAGES.communityLoadFailed);
+  }
+  return {
+    id: r.id,
+    groupName: r.group_name,
+    groupStatus: r.group_status as ApprovalDecision,
+    title: r.title,
+    date: r.event_date,
+    time: r.event_time.slice(0, 5),
+    facilityName: r.facility_name,
+    capacity,
+    status: r.status as ApprovalDecision,
+    createdByEmail: typeof r.created_by_email === 'string' ? r.created_by_email : null,
+    createdAt: r.created_at
+  };
+}
+
 export function createAdminRepository(getClient: () => SupabaseClient) {
   async function requireClient(): Promise<SupabaseClient> {
     let client: SupabaseClient;
@@ -216,7 +326,7 @@ export function createAdminRepository(getClient: () => SupabaseClient) {
     client: SupabaseClient,
     fn: string,
     args: Record<string, unknown>,
-    subject: 'facility' | 'user'
+    subject: 'facility' | 'user' | 'group' | 'event'
   ): Promise<unknown> {
     let result: { data: unknown; error: unknown };
     try {
@@ -280,6 +390,52 @@ export function createAdminRepository(getClient: () => SupabaseClient) {
       }
       const client = await requireClient();
       return parseAdminUser(await call(client, FIND_USER_RPC, { p_email: trimmed }, 'user'));
+    },
+
+    /** Communities awaiting a decision (or every status when none is given). */
+    async loadCommunityGroups(status: ApprovalDecision | null = 'pending'): Promise<AdminGroup[]> {
+      const client = await requireClient();
+      try {
+        const data = await call(client, LIST_GROUPS_RPC, { p_status: status }, 'group');
+        if (!Array.isArray(data)) throw new AdminError('unknown', ADMIN_MESSAGES.communityLoadFailed);
+        return data.map(mapAdminGroup);
+      } catch (err) {
+        const mapped = toAdminError(err, 'group');
+        throw mapped.kind === 'unknown' ? new AdminError('unknown', ADMIN_MESSAGES.communityLoadFailed) : mapped;
+      }
+    },
+
+    /** Events awaiting a decision (or every status when none is given). */
+    async loadCommunityEvents(status: ApprovalDecision | null = 'pending'): Promise<AdminEvent[]> {
+      const client = await requireClient();
+      try {
+        const data = await call(client, LIST_EVENTS_RPC, { p_status: status }, 'event');
+        if (!Array.isArray(data)) throw new AdminError('unknown', ADMIN_MESSAGES.communityLoadFailed);
+        return data.map(mapAdminEvent);
+      } catch (err) {
+        const mapped = toAdminError(err, 'event');
+        throw mapped.kind === 'unknown' ? new AdminError('unknown', ADMIN_MESSAGES.communityLoadFailed) : mapped;
+      }
+    },
+
+    async setGroupStatus(groupId: string, status: ApprovalDecision): Promise<ApprovalDecision> {
+      if (!UUID_PATTERN.test(groupId) || !APPROVAL_DECISIONS.includes(status)) {
+        throw new AdminError('invalid', ADMIN_MESSAGES.invalid);
+      }
+      const client = await requireClient();
+      const data = await call(client, SET_GROUP_STATUS_RPC, { p_group_id: groupId, p_status: status }, 'group');
+      if (data !== status) throw new AdminError('unknown', ADMIN_MESSAGES.unknown);
+      return status;
+    },
+
+    async setEventStatus(eventId: string, status: ApprovalDecision): Promise<ApprovalDecision> {
+      if (!UUID_PATTERN.test(eventId) || !APPROVAL_DECISIONS.includes(status)) {
+        throw new AdminError('invalid', ADMIN_MESSAGES.invalid);
+      }
+      const client = await requireClient();
+      const data = await call(client, SET_EVENT_STATUS_RPC, { p_event_id: eventId, p_status: status }, 'event');
+      if (data !== status) throw new AdminError('unknown', ADMIN_MESSAGES.unknown);
+      return status;
     },
 
     /** Resolves with the role the database now holds, which must be the one asked for. */
