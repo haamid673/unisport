@@ -39,7 +39,7 @@ describe('host configuration', () => {
   const directive = (name: string) => csp.split(';').map(d => d.trim()).find(d => d.startsWith(`${name} `)) ?? '';
 
   it('allows scripts only from this site and Razorpay Checkout, never inline or eval', () => {
-    expect(directive('script-src')).toBe("script-src 'self' https://checkout.razorpay.com");
+    expect(directive('script-src')).toBe("script-src 'self' https://checkout.razorpay.com https://cdn.razorpay.com");
     expect(csp).not.toContain('unsafe-eval');
   });
 

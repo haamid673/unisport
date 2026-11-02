@@ -101,8 +101,9 @@ refresh, back/forward and the post-sign-in return all work.
 
 Response headers worth setting at the host: `Content-Security-Policy` (the app
 needs `connect-src` for the Supabase origin and `img-src` for its images, plus
-`script-src`/`frame-src` for `checkout.razorpay.com` only if payments are ever
-enabled), `X-Content-Type-Options: nosniff`, `Referrer-Policy:
+`script-src` for `checkout.razorpay.com` and `cdn.razorpay.com` (Checkout
+injects its risk-detection script from the CDN) and `frame-src` for
+`api.razorpay.com`/`checkout.razorpay.com`, only if payments are enabled), `X-Content-Type-Options: nosniff`, `Referrer-Policy:
 strict-origin-when-cross-origin`, long-lived caching for `/assets/*` (hashed
 file names) and no caching for `index.html`.
 
