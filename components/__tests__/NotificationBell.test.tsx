@@ -31,7 +31,7 @@ describe('notification bell', () => {
 
   it('marks one as read on opening it and all on request, then re-reads', () => {
     expect(bell).toMatch(/markRead\(\[n\.id\]\)/);
-    expect(bell).toMatch(/markRead\(\)\.then\(refresh, refresh\)/);
+    expect(bell).toMatch(/markRead\(\)\.then\(afterMark, afterMark\)/);
   });
 
   it('closes on outside click and Escape', () => {
@@ -41,5 +41,11 @@ describe('notification bell', () => {
 
   it('is in the navigation for signed-in people, on desktop and mobile', () => {
     expect((navbar.match(/<NotificationBell userId=\{user\.id\} \/>/g) ?? []).length).toBe(2);
+  });
+
+  it('tells every bell to re-read after marking, so the two in the navigation agree', () => {
+    expect(bell).toContain("NOTIFICATIONS_CHANGED = 'unisport:notifications-changed'");
+    expect(bell).toMatch(/window\.addEventListener\(NOTIFICATIONS_CHANGED, refresh\)/);
+    expect(bell).toMatch(/window\.dispatchEvent\(new Event\(NOTIFICATIONS_CHANGED\)\)/);
   });
 });

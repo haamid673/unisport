@@ -10,6 +10,13 @@ import { describeNotification, notificationTarget } from '../services/notificati
 /** Re-read about once a minute while the page is visible, like the waitlist. */
 export const NOTIFICATION_POLL_MS = 60_000;
 
+/**
+ * The navigation renders one bell for wide screens and one for narrow
+ * ones. Marking something read in either tells both to re-read, so they
+ * never disagree.
+ */
+export const NOTIFICATIONS_CHANGED = 'unisport:notifications-changed';
+
 const timeAgo = (iso: string, now: number): string => {
   const minutes = Math.max(0, Math.round((now - Date.parse(iso)) / 60_000));
   if (minutes < 1) return 'just now';
@@ -70,6 +77,15 @@ const NotificationBell: React.FC<{ userId: string }> = ({ userId }) => {
     };
   }, [userId, refresh]);
 
+  useEffect(() => {
+    window.addEventListener(NOTIFICATIONS_CHANGED, refresh);
+    return () => window.removeEventListener(NOTIFICATIONS_CHANGED, refresh);
+  }, [refresh]);
+
+  const afterMark = () => {
+    window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
+  };
+
   // Close on outside click or Escape.
   useEffect(() => {
     if (!open) return;
@@ -90,12 +106,12 @@ const NotificationBell: React.FC<{ userId: string }> = ({ userId }) => {
   const unread = state.phase === 'ready' ? state.unread : 0;
 
   const markAll = () => {
-    void notificationRepository.markRead().then(refresh, refresh);
+    void notificationRepository.markRead().then(afterMark, afterMark);
   };
 
   const openItem = (n: AppNotification) => {
     if (n.readAt === null) {
-      void notificationRepository.markRead([n.id]).then(refresh, refresh);
+      void notificationRepository.markRead([n.id]).then(afterMark, afterMark);
     }
     const target = notificationTarget(n);
     setOpen(false);
