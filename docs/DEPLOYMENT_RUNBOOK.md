@@ -1,4 +1,4 @@
-# Hosted deployment runbook (DRAFT — for review, never executed)
+# Hosted deployment runbook (reviewed; executed only gate by gate, see §12 for the demo order)
 
 Status: **written, not run.** Nothing in this document has been applied to any
 hosted project. Every step marked **GATE** needs the owner's explicit approval
@@ -25,7 +25,7 @@ Hard rules, restated:
 | Static hosting for the built app (D7) | Cloudflare Pages, Netlify, Vercel, GitHub Pages, any static host or object store + CDN | step 5 |
 | Transactional email provider (SMTP) for sign-up confirmation and password reset | Resend, Postmark, SES, the host's built-in | step 4 (Auth) |
 | Whether to enable email confirmation on the hosted project | yes (recommended once SMTP exists) / no | step 4 |
-| Payments | **Off.** Decision D6: the demo uses the local simulator only; no live Razorpay. The payment Edge Functions are not deployed and no `VITE_RAZORPAY_TEST_KEY_ID` is set | — |
+| Payments | **Razorpay TEST mode** for the public demo (decision superseding D6; never live keys). The three payment Edge Functions are deployed and `VITE_RAZORPAY_TEST_KEY_ID` is set. See §12 | — |
 
 ## 2. Prerequisites
 
@@ -114,7 +114,7 @@ note its timestamp. On a fresh project this is cheap insurance.
 
 **Apply the migrations in this exact order**, as one forward-only sequence
 (the owner runs the files in the SQL editor or with the CLI against the
-hosted connection string, after confirming §3). The 40 files, oldest first:
+hosted connection string, after confirming §3). The 41 files, oldest first:
 
 1. `20261008135629_foundation.sql`
 2. `20261008135914_facilities.sql`
@@ -156,17 +156,18 @@ hosted connection string, after confirming §3). The 40 files, oldest first:
 38. `20261026100000_admin_functions.sql`
 39. `20261027100000_community.sql`
 40. `20261028100000_notifications.sql`
+41. `20261029100000_admin_audit.sql`
 
-**All 40 ship, including the 7 payment migrations** (`20261018…`–`20261024…`).
+**All 41 ship, including the 7 payment migrations** (`20261018…`–`20261024…`).
 This is deliberate: later migrations depend on them (`cancel_booking` reads
 `payment_attempts`), the schema is simpler to reason about when hosted equals
-local, and with no Edge Functions deployed and no key configured the payment
-tables simply stay empty and the UI keeps payment switched off.
+local, and for a build with no test key id the payment tables simply stay empty and the UI
+keeps payment switched off; the demo build sets the test key id (§12).
 
 After applying, verify (read-only):
 
 ```sql
-select count(*) from supabase_migrations.schema_migrations;   -- 40 if the CLI recorded them
+select count(*) from supabase_migrations.schema_migrations;   -- 41 with the CLI; 0 or absent when applied with psql (§12), then rely on the object checks below
 select jobname, active from cron.job order by 1;               -- the three jobs
 select count(*) from pg_proc where proname in
   ('create_booking','cancel_booking','join_waitlist','create_group','join_event',
@@ -255,3 +256,39 @@ For the demo plan (`docs/PRODUCTION_DEMO_PLAN.md`):
   rule is needed.
 - **After deploying:** `SMOKE_BASE_URL=<site> SMOKE_EMAIL=... SMOKE_PASSWORD=...
   npm run smoke` with a throwaway player.
+
+## 12. Public demo: the order of events (each step is a gate)
+
+Nothing below is run by automation. The owner runs every hosted command from
+their own terminal or the dashboards; secrets and connection strings are never
+pasted into chat or committed. The demo project is `vnusbfswqtagrcvkbauf`
+(never the project linked in `supabase/.temp`).
+
+| # | Step | Who | Check |
+|---|---|---|---|
+| 1 | Push the branch to GitHub (and merge to `main` if Cloudflare builds `main`) | owner says go, assistant pushes | CI green on the commit |
+| 2 | Run the §3 read-only queries on the demo project | owner | all counts 0; send only the numbers |
+| 3 | Dashboard: enable `pg_cron`; Auth: minimum password 8, confirmations off, rate limits reviewed | owner | per §4 and §11 |
+| 4 | Backup point (dashboard) | owner | note the time |
+| 5 | Apply the 41 migrations in order (see the loop below) | owner | §6 verification queries |
+| 6 | Deploy the 3 Edge Functions (create/verify with JWT, webhook without) | owner | each answers 401 without a token |
+| 7 | Set the 3 function secrets in the dashboard (test key id, test key secret, a NEW webhook secret) | owner | never reuse local test values |
+| 8 | Razorpay (Test Mode): webhook URL `https://vnusbfswqtagrcvkbauf.supabase.co/functions/v1/payments-webhook`, same secret, events `payment.authorized`, `payment.captured`, `payment.failed`, `order.paid` | owner | a Wallet test payment settles |
+| 9 | Cloudflare Pages: connect the repo; build `npm ci && npm run build`, output `dist`, Node 22; variables `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_RAZORPAY_TEST_KEY_ID` | owner | site loads, About page opens |
+| 10 | Auth URL configuration: Site URL and redirect `<site>/**` set to the Pages URL | owner | password reset link lands on `/reset-password` |
+| 11 | First administrator (§7), demo owner and player accounts, `supabase/demo/seed_demo.sql` and `nightly_cleanup.sql` (§11) | owner | Governance Center shows the seed |
+| 12 | Smoke test on the live URL (§8 and `npm run smoke`), then the README gets the URL | assistant + owner | no third-party hosts except Supabase and Razorpay |
+
+Applying the migrations without the CLI's `db push` (which the repository
+forbids): from the repository root, with the session-pooler connection string
+from Settings → Database in the variable `DEMO_DB_URL` (the direct host needs
+IPv6; the pooler works everywhere):
+
+```bash
+for f in supabase/migrations/*.sql; do
+  psql "$DEMO_DB_URL" -v ON_ERROR_STOP=1 --single-transaction -q -f "$f" || break
+done
+```
+
+Stop at the first error and report the file name; do not skip it. Fix forward
+with a new migration, never by editing an applied one.
