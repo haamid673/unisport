@@ -8,7 +8,6 @@ import { join, relative } from 'node:path';
 import AdminDashboard from '../AdminDashboard';
 import OwnerDashboard from '../OwnerDashboard';
 import { userService } from '../../services/userService';
-import { facilityService } from '../../services/facilityService';
 import type { User } from '../../types';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
@@ -94,8 +93,10 @@ describe('no demo data or credentials in the application', () => {
   });
 
   it('keeps no mock catalog, accounts or community seed in memory', () => {
-    expect(facilityService.getAllFacilities(true)).toEqual([]);
-    expect(facilityService.getAllSlots()).toEqual([]);
+    for (const gone of ['facilityService', 'bookingService', 'paymentService', 'aiEngine', 'eventService']) {
+      expect(existsSync(join(root, `services/${gone}.ts`)), gone).toBe(false);
+    }
+    expect(existsSync(join(root, 'components/PaymentPage.tsx'))).toBe(false);
     // community data lives in the database; the browser-local prototype is gone
     expect(existsSync(join(root, 'services/eventService.ts'))).toBe(false);
     expect((userService as Record<string, unknown>).getAllUsers).toBeUndefined();
@@ -107,11 +108,6 @@ describe('no PII or noise logging', () => {
     for (const file of sourceFiles()) {
       expect(read(file), file).not.toMatch(/console\.log\(/);
     }
-  });
-
-  it('does not log user identity or fake email receipts', () => {
-    const payment = read('components/PaymentPage.tsx');
-    expect(payment).not.toMatch(/EMAIL SENT|user\.email|user\.name/);
   });
 });
 

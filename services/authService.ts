@@ -34,6 +34,9 @@ export interface ProfileRow {
 const PROFILE_COLUMNS = 'id, full_name, phone, city, avatar_url, role, created_at';
 const KNOWN_ROLES: UserRole[] = ['user', 'owner', 'admin'];
 
+/** Minimum length the app asks for when a person sets a new password. */
+export const MIN_PASSWORD_LENGTH = 8;
+
 /** A user-facing error. `message` is always safe to display. */
 export class AuthFlowError extends Error {
   constructor(message: string) {
@@ -91,6 +94,12 @@ export function toAuthMessage(error: unknown): string {
       return 'Too many attempts. Please wait a moment and try again.';
     case 'validation_failed':
       return 'Please check the details you entered.';
+    case 'same_password':
+      return 'Your new password must be different from your current one.';
+    case 'session_not_found':
+    case 'session_expired':
+    case 'refresh_token_not_found':
+      return 'This reset link has expired or was already used. Request a new one.';
   }
 
   if (e?.name === 'AuthRetryableFetchError' || e?.status === 0) {
@@ -195,6 +204,46 @@ export function createAuthService(getClient: () => SupabaseClient) {
       if (error) throw new AuthFlowError(toAuthMessage(error));
     },
 
+    /**
+     * Ask Supabase to email a password-reset link. It answers the same way
+     * whether or not the address has an account, so this never reveals
+     * which emails are registered; only a rate limit or a network problem
+     * is reported. The link returns to /reset-password.
+     */
+    async requestPasswordReset(email: string): Promise<void> {
+      const base = import.meta.env.BASE_URL;
+      const redirectTo =
+        typeof window !== 'undefined' ? `${window.location.origin}${base}reset-password` : undefined;
+
+      const { error } = await getClient().auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        redirectTo
+      });
+
+      if (error) throw new AuthFlowError(toAuthMessage(error));
+    },
+
+    /** True when the page was opened from a valid reset link (a recovery session exists). */
+    async hasRecoverySession(): Promise<boolean> {
+      try {
+        const {
+          data: { session }
+        } = await getClient().auth.getSession();
+        return Boolean(session);
+      } catch {
+        return false;
+      }
+    },
+
+    /** Set a new password for the person who opened a reset link (or is signed in). */
+    async updatePassword(newPassword: string): Promise<void> {
+      if (newPassword.length < MIN_PASSWORD_LENGTH) {
+        throw new AuthFlowError(`Use at least ${MIN_PASSWORD_LENGTH} characters.`);
+      }
+
+      const { error } = await getClient().auth.updateUser({ password: newPassword });
+      if (error) throw new AuthFlowError(toAuthMessage(error));
+    },
+
     /** Sign out of this browser only. */
     async signOut(): Promise<void> {
       const { error } = await getClient().auth.signOut({ scope: 'local' });
@@ -210,11 +259,13 @@ export function createAuthService(getClient: () => SupabaseClient) {
      * or null; `onError` receives a safe message when a signed-in
      * session cannot be turned into a user.
      *
+     * `onRecovery` fires when a password-reset link was opened.
      * Returns an unsubscribe function.
      */
     subscribe(
       onUser: (user: User | null) => void,
-      onError: (message: string) => void
+      onError: (message: string) => void,
+      onRecovery?: () => void
     ): () => void {
       const client = getClient();
       let latest = 0;
@@ -223,6 +274,10 @@ export function createAuthService(getClient: () => SupabaseClient) {
       const { data } = client.auth.onAuthStateChange((event, session) => {
         // Token refresh does not change who the user is.
         if (event === 'TOKEN_REFRESHED' && session) return;
+
+        // A password-reset link was opened: the app sends the person to
+        // the set-new-password screen, wherever the link landed.
+        if (event === 'PASSWORD_RECOVERY') onRecovery?.();
 
         const mine = ++latest;
 

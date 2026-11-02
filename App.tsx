@@ -16,6 +16,9 @@ const Community = lazy(() => import('./components/Community'));
 const CommunityDetail = lazy(() => import('./components/CommunityDetail'));
 const UserProfile = lazy(() => import('./components/UserProfile'));
 import NotFound from './components/NotFound';
+import ResetPassword from './components/ResetPassword';
+import { PAYMENTS_AVAILABLE } from './services/razorpayCheckout';
+import { TEST_MODE_HEADLINE } from './services/demoPayments';
 
 // Earlier prototype builds stored a simulated login, demo accounts and
 // mock records in this browser. None of it is honoured or shown.
@@ -69,7 +72,10 @@ const App: React.FC = () => {
       (message) => {
         setAuthError(message);
         setIsReady(true);
-      }
+      },
+      // A password-reset link was opened: go to the set-new-password
+      // screen even if the link landed on another path.
+      () => navigate(ROUTES.resetPassword, { replace: true })
     );
   }, []);
 
@@ -114,6 +120,12 @@ const App: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  // The reset link's screen works signed out (no recovery session yet) and
+  // with the short-lived recovery session the link creates.
+  if (location.pathname.replace(/\/+$/, '') === ROUTES.resetPassword) {
+    return <ResetPassword onDone={() => navigate(ROUTES.home, { replace: true })} />;
   }
 
   if (!user) return <Auth notice={authError} />;
@@ -187,6 +199,9 @@ const App: React.FC = () => {
           <p className="text-xs text-neutral-600 font-bold uppercase tracking-widest">
             © {new Date().getFullYear()} UniSport
           </p>
+          {PAYMENTS_AVAILABLE && (
+            <p className="text-[10px] text-amber-400 font-bold uppercase tracking-widest">{TEST_MODE_HEADLINE}</p>
+          )}
         </div>
       </footer>
     </div>

@@ -12,6 +12,8 @@ interface AuthProps {
 
 const Auth: React.FC<AuthProps> = ({ notice }) => {
   const [isLogin, setIsLogin] = useState(true);
+  // "Forgot password?": an email-only form that sends a reset link.
+  const [forgot, setForgot] = useState(false);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,6 +32,7 @@ const Auth: React.FC<AuthProps> = ({ notice }) => {
 
   const switchMode = (loginMode: boolean) => {
     setIsLogin(loginMode);
+    setForgot(false);
     setError('');
     setInfo('');
     setConfirmPassword('');
@@ -44,6 +47,20 @@ const Auth: React.FC<AuthProps> = ({ notice }) => {
 
     if (!isValidEmail(email)) {
       setError('Please enter a valid email address.');
+      return;
+    }
+
+    if (forgot) {
+      setSubmitting(true);
+      try {
+        await authService.requestPasswordReset(email);
+        // The same answer whether or not the address has an account.
+        setInfo('If an account exists for that email, a password reset link is on its way. Check your inbox.');
+      } catch (err: any) {
+        setError(err?.message || 'Could not send the reset link. Please try again.');
+      } finally {
+        setSubmitting(false);
+      }
       return;
     }
 
@@ -156,7 +173,7 @@ const Auth: React.FC<AuthProps> = ({ notice }) => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
+          {!isLogin && !forgot && (
             <>
               <div>
                 <label htmlFor="auth-name" className="block text-xs font-black text-neutral-400 uppercase tracking-widest mb-1">
@@ -208,6 +225,7 @@ const Auth: React.FC<AuthProps> = ({ notice }) => {
             />
           </div>
 
+          {!forgot && (
           <div>
             <label htmlFor="auth-password" className="block text-xs font-black text-neutral-400 uppercase tracking-widest mb-1">
               Password
@@ -223,8 +241,9 @@ const Auth: React.FC<AuthProps> = ({ notice }) => {
               placeholder="••••••••"
             />
           </div>
+          )}
 
-          {!isLogin && (
+          {!isLogin && !forgot && (
             <div>
               <label htmlFor="auth-confirm-password" className="block text-xs font-black text-neutral-400 uppercase tracking-widest mb-1">
                 Confirm Password
@@ -251,8 +270,27 @@ const Auth: React.FC<AuthProps> = ({ notice }) => {
                 : 'bg-neutral-900 hover:bg-orange-600 hover:shadow-xl transform hover:-translate-y-0.5'
             }`}
           >
-            {submitting ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
+            {submitting ? 'Please wait...' : forgot ? 'Send reset link' : isLogin ? 'Sign In' : 'Create Account'}
           </button>
+
+          {isLogin && !forgot && (
+            <button
+              type="button"
+              onClick={() => { setForgot(true); setError(''); setInfo(''); }}
+              className="w-full text-center text-[11px] font-black uppercase tracking-widest text-neutral-400 hover:text-orange-600 transition-colors"
+            >
+              Forgot password?
+            </button>
+          )}
+          {forgot && (
+            <button
+              type="button"
+              onClick={() => { setForgot(false); setError(''); setInfo(''); }}
+              className="w-full text-center text-[11px] font-black uppercase tracking-widest text-neutral-400 hover:text-orange-600 transition-colors"
+            >
+              Back to sign in
+            </button>
+          )}
         </form>
       </div>
     </div>

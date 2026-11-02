@@ -47,7 +47,7 @@ Priority: **P0** blocks the MVP · **P1** needed for the MVP · **P2** polish / 
 | B-02 | P0 | Verify the slot-row "Accept offer" with a live offer in a real browser | 2 | screenshots + DB rows: offer → accept → linked booking; 19:00 row still "Book" |
 | B-03 | P1 | Refresh slot availability while the picker is open, bounded (one read per ~60 s plus on focus), not aggressive polling | 2 | another user's lapsed hold turns "Full" into "Book" without reload |
 | B-04 | P2 | Date default uses `toISOString()` (UTC) while the user is local; decide facility time zone handling (README already flags it) | 2/7 | decision recorded; default date and the "past date" rule agree |
-| B-05 | P1 | Password reset (needs email provider; local mail catcher exists) | 6 | request link → reset → sign in; no account enumeration |
+| B-05 | P1 | **Built 2 Nov 2026** (request link, set new password, no account enumeration; verified live up to the server's same-password refusal; success path covered by unit tests). Password reset (needs email provider; local mail catcher exists) | 6 | request link → reset → sign in; no account enumeration |
 | B-06 | P2 | Persist bio/preferences or label them clearly as this-browser-only | 2 | no data silently lost across devices, or an honest label |
 | B-07 | P0 | Admin console: pending-facility queue, approve / reject / suspend, over `is_admin()`-gated RPCs | 3 | owner creates → admin approves in UI → customer sees it, no SQL |
 | B-08 | P0 | Admin role management by email via a guarded RPC; replace the README trigger-disable recipe with the safe first-admin procedure | 3 | cannot remove the last admin; guard trigger stays enabled; documented |
@@ -56,7 +56,7 @@ Priority: **P0** blocks the MVP · **P1** needed for the MVP · **P2** polish / 
 | B-11 | P1 | Real routes (`/`, `/community`, `/community/:id`, `/profile`, `/admin`, `/owner`), guards, 404, base-path safe | 5 | refresh and back/forward work on every primary URL |
 | B-12 | P1 | In-app notifications (offer issued/expiring, hold expired, booking cancelled, facility approved/rejected, group/event approved) | 6 | one notification per event, correct user, survives reload |
 | B-13 | P1 | Owner: show status and rejection/suspension; clearer validation; booking list shows cancelled/expired | 3 | status always visible; no confusing states |
-| B-14 | P2 | Remove unreachable legacy code (`PaymentPage`, `bookingService`, `paymentService`, `facilityService`, `aiEngine`, the dead `payment` tab) **only after confirming nothing imports it**; no visible behaviour change | 7 | tests, lint, build green; no UI change |
+| B-14 | P2 | **Done 2 Nov 2026.** Remove unreachable legacy code (`PaymentPage`, `bookingService`, `paymentService`, `facilityService`, `aiEngine`, the dead `payment` tab) **only after confirming nothing imports it**; no visible behaviour change | 7 | tests, lint, build green; no UI change |
 | B-15 | P1 | **Done.** Production assets: replace Tailwind CDN with the build plugin, bundle icons and fonts, bundle or fall back for hotlinked images, split the bundle | 7 | built page needs no CDN style/script; size warning addressed |
 | B-16 | P1 | Truthful README and filled `docs/*.md`; demo script; screenshots | 9 | each doc accurate against the code |
 | B-17 | P1 | Authenticated visual audit of every screen at desktop and phone width (the unauthenticated screen passed: no overflow at 375 px) | 2–3 | list of real defects, fixed without restyling |

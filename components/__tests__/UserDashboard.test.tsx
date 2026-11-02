@@ -22,7 +22,6 @@ vi.mock('../../services/facilityRepository', async () => {
 });
 
 import UserDashboard from '../UserDashboard';
-import { CUSTOMER_CHECKOUT_ENABLED } from '../../services/bookingService';
 
 const source = readFileSync(
   fileURLToPath(new URL('../UserDashboard.tsx', import.meta.url)),
@@ -89,7 +88,6 @@ describe('UserDashboard repository integration', () => {
 
 describe('reservation flow', () => {
   it('keeps the mock checkout disabled and unreachable', () => {
-    expect(CUSTOMER_CHECKOUT_ENABLED).toBe(false);
     expect(activeSource).not.toMatch(
       /onStartPayment|createBookingTransactional|CUSTOMER_CHECKOUT_ENABLED|paymentService|PaymentPage/
     );

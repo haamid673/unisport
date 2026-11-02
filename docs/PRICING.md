@@ -15,8 +15,5 @@ Pricing is intentionally simple.
 ## Not implemented
 
 There is **no dynamic or demand-based pricing**, no weekend or peak
-multipliers, no discounts or coupons, and no tax or fee calculation. The
-repository still contains a leftover prototype (`services/aiEngine.ts`, the
-`DemandPrediction` type, a `weekendMultiplier` field in `types.ts`) from an
-earlier mock; it is not imported by any screen and does not affect any
-price. It is scheduled for removal (backlog B-14).
+multipliers, no discounts or coupons, and no tax or fee calculation. (An
+earlier prototype of demand-based pricing was removed from the codebase.)

@@ -5,7 +5,8 @@ import {
   profileToUser,
   toAuthMessage,
   AuthFlowError,
-  ProfileRow
+  ProfileRow,
+  MIN_PASSWORD_LENGTH
 } from '../authService';
 
 const PROFILE: ProfileRow = {
@@ -31,6 +32,8 @@ interface FakeOptions {
   session?: { user: ReturnType<typeof authUser> } | null;
   signInError?: unknown;
   signUpResult?: { data: any; error: unknown };
+  resetError?: unknown;
+  updateError?: unknown;
 }
 
 /** A minimal stand-in for the parts of SupabaseClient the service uses. */
@@ -67,6 +70,8 @@ function fakeClient(options: FakeOptions = {}) {
       options.signUpResult ?? { data: { session: null, user: {} }, error: null }
     ),
     signOut: vi.fn(async () => ({ error: null })),
+    resetPasswordForEmail: vi.fn(async (_e: string, _o?: unknown) => ({ data: {}, error: options.resetError ?? null })),
+    updateUser: vi.fn(async (_a: unknown) => ({ data: {}, error: options.updateError ?? null })),
     getSession: vi.fn(async () => ({
       data: { session: options.session ?? null }
     })),
@@ -332,5 +337,63 @@ describe('updateOwnProfile', () => {
     await expect(
       createAuthService(() => f.client).updateOwnProfile({ name: 'x' })
     ).rejects.toThrow(/not signed in/i);
+  });
+});
+
+
+describe('password reset', () => {
+  it('requests a link for a normalised email and returns to /reset-password', async () => {
+    vi.stubGlobal('window', { location: { origin: 'https://demo.example' } });
+    const { client, auth } = fakeClient();
+    await createAuthService(() => client).requestPasswordReset('  Player@Example.COM ');
+    vi.unstubAllGlobals();
+    expect(auth.resetPasswordForEmail).toHaveBeenCalledTimes(1);
+    const [email, options] = auth.resetPasswordForEmail.mock.calls[0] as [string, { redirectTo?: string }];
+    expect(email).toBe('player@example.com');
+    expect(options.redirectTo).toBe('https://demo.example/reset-password');
+  });
+
+  it('answers the same way for any address: a success never says whether the account exists', async () => {
+    const { client } = fakeClient();
+    await expect(createAuthService(() => client).requestPasswordReset('nobody@example.com')).resolves.toBeUndefined();
+  });
+
+  it('reports only a rate limit or a network problem, with safe text', async () => {
+    const limited = fakeClient({ resetError: { code: 'over_email_send_rate_limit', message: 'raw detail' } });
+    await expect(createAuthService(() => limited.client).requestPasswordReset('a@example.com')).rejects.toThrow(/Too many attempts/);
+    const odd = fakeClient({ resetError: { code: 'x', message: 'relation secret' } });
+    await expect(createAuthService(() => odd.client).requestPasswordReset('a@example.com')).rejects.not.toThrow(/secret/);
+  });
+
+  it('knows whether a recovery session exists', async () => {
+    expect(await createAuthService(() => fakeClient({ session: { user: authUser() } }).client).hasRecoverySession()).toBe(true);
+    expect(await createAuthService(() => fakeClient({ session: null }).client).hasRecoverySession()).toBe(false);
+  });
+
+  it('refuses a short password before any request, and sets a long one', async () => {
+    const { client, auth } = fakeClient();
+    const svc = createAuthService(() => client);
+    await expect(svc.updatePassword('short')).rejects.toBeInstanceOf(AuthFlowError);
+    expect(auth.updateUser).not.toHaveBeenCalled();
+    await svc.updatePassword('a-long-enough-password');
+    expect(auth.updateUser).toHaveBeenCalledWith({ password: 'a-long-enough-password' });
+    expect(MIN_PASSWORD_LENGTH).toBe(8);
+  });
+
+  it('maps reused, weak and expired-link errors to clear messages', async () => {
+    const run = (code: string) => createAuthService(() => fakeClient({ updateError: { code, message: 'x' } }).client).updatePassword('a-long-enough-password');
+    await expect(run('same_password')).rejects.toThrow(/different from your current/);
+    await expect(run('weak_password')).rejects.toThrow(/too weak/);
+    await expect(run('session_not_found')).rejects.toThrow(/expired or was already used/);
+  });
+
+  it('tells the app when a reset link was opened, before loading any user', () => {
+    const { client, emit } = fakeClient();
+    const onRecovery = vi.fn();
+    createAuthService(() => client).subscribe(() => {}, () => {}, onRecovery);
+    emit('PASSWORD_RECOVERY', null);
+    expect(onRecovery).toHaveBeenCalledTimes(1);
+    emit('SIGNED_OUT', null);
+    expect(onRecovery).toHaveBeenCalledTimes(1);
   });
 });

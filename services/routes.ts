@@ -17,7 +17,8 @@ export const ROUTES = {
   community: '/community',
   communityGroup: '/community/:groupId',
   profile: '/profile',
-  auth: '/auth'
+  auth: '/auth',
+  resetPassword: '/reset-password'
 } as const;
 
 export type Tab = 'dashboard' | 'community' | 'profile';

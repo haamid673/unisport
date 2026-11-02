@@ -61,7 +61,9 @@ Record the project reference and the date here: `__________`.
   run. After step 6, check `select jobname, schedule, active from cron.job;`
   lists `expire-pending-bookings`, `process-waitlist`, `notify-expiring-offers`.
 - **Auth → URL configuration:** Site URL = the production origin (including the
-  base path if any); Redirect URLs = that origin and any preview origin. The
+  base path if any); Redirect URLs = that origin with a `/**` wildcard (the
+  password-reset link returns to `<origin>/reset-password`) and any preview
+  origin. The
   local value `http://127.0.0.1:3000` must not remain.
 - **Auth → Providers → Email:** confirmations on once SMTP is configured; set
   a minimum password length of at least 8 (the local default is 6); keep

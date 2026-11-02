@@ -46,6 +46,7 @@ import {
 } from '../services/waitlistRepository';
 import { userService } from '../services/userService';
 import { defaultBookingDate } from '../services/bookingDate';
+import TestModeNotice from './TestModeNotice';
 import { PAYMENTS_AVAILABLE } from '../services/razorpayCheckout';
 import { hasUnresolvedPayment, newCheckoutCertainlyRefused, onBookingPaymentChange } from '../services/bookingCheckout';
 import { fetchOpenAttemptLeases, type AttemptLeaseFacts } from '../services/paymentClient';
@@ -1491,6 +1492,12 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
         <div>
           <div className="bg-white p-6 rounded-xl border-2 border-neutral-100 sticky top-8">
             <h4 className="font-black uppercase text-lg mb-6">Your Schedule</h4>
+
+            {PAYMENTS_AVAILABLE && (
+              <div className="mb-4">
+                <TestModeNotice />
+              </div>
+            )}
 
             {PAYMENTS_AVAILABLE && scheduleBookingId && (
               <div className="mb-4 p-3 border border-neutral-200 rounded-lg">

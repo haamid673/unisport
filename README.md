@@ -101,8 +101,9 @@ e2e/checkout-browser/     local browser run of the checkout UI against a mock
   **simulator only**; it has never talked to Razorpay, no live key is used,
   and refunds are not implemented. A paid booking cannot be cancelled in the
   app.
-- **No email, SMS or push.** Notifications are in-app only. Password reset is
-  not implemented (it needs an email provider).
+- **No SMS or push; email only for sign-in help.** Notifications are in-app
+  only. Password reset sends an email through Supabase Auth (the built-in
+  sender is very low-volume; use an SMTP provider for real traffic).
 - **Time is UTC.** The database's day is UTC; venues have no time zone.
 - **No image upload.** Venue photos are bundled defaults per sport.
 - **Profile bio and preferences are saved in the browser only** (the form says
@@ -112,9 +113,6 @@ e2e/checkout-browser/     local browser run of the checkout UI against a mock
   in CI. Features were verified in a real browser by hand.
 - **Not deployed anywhere.** The hosted plan is written, not executed:
   [docs/DEPLOYMENT_RUNBOOK.md](docs/DEPLOYMENT_RUNBOOK.md).
-- Leftover prototype files (`services/aiEngine.ts`, `PaymentPage.tsx`,
-  `bookingService.ts`, `facilityService.ts`, `paymentService.ts`) are not used
-  by any screen and are scheduled for removal.
 
 ## Development data (local only)
 

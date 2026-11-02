@@ -63,6 +63,14 @@ describe('who may open what', () => {
   });
 });
 
+describe('reset-password route', () => {
+  it('exists, is not a tab, and is left to its own screen for every role', () => {
+    expect(ROUTES.resetPassword).toBe('/reset-password');
+    expect(tabForPath('/reset-password')).toBeNull();
+    for (const r of roles) expect(redirectFor(r, '/reset-password')).toBeNull();
+  });
+});
+
 describe('redirectFor', () => {
   it('never redirects a role away from a page it can use', () => {
     expect(redirectFor('user', '/')).toBeNull();
