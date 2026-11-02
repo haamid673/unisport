@@ -25,6 +25,8 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          # Full history so the migration guard can compare with the base branch.
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -36,6 +38,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Cheap repository checks: migration names and append-only order,
+      # secrets in tracked files, nothing that links to or pushes to a
+      # hosted Supabase project, no secret-looking VITE_ variable.
+      - name: Repository guards
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+        run: npm run guards
+
       - name: Unit tests
         run: npm test
 
@@ -44,6 +54,11 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # The built page must not depend on a third-party CDN for styles,
+      # scripts or fonts.
+      - name: Built output guard
+        run: npm run guards:dist
 
   database:
     name: Database (migrations + pgTAP)

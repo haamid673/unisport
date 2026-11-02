@@ -44,3 +44,12 @@ describe('App routing', () => {
     expect(mobile).toMatch(/user\.role === 'user' && \(\s*<>/);
   });
 });
+
+describe('code splitting', () => {
+  it('loads every screen on demand behind one Suspense boundary', () => {
+    for (const name of ['UserDashboard', 'OwnerDashboard', 'AdminDashboard', 'Community', 'CommunityDetail', 'UserProfile']) {
+      expect(app).toContain(`const ${name} = lazy(() => import('./components/${name}'))`);
+    }
+    expect(app).toMatch(/<Suspense fallback=\{<PageSpinner \/>\}>/);
+  });
+});

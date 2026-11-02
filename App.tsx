@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { User } from './types';
 import { ROUTES, communityPath, homePath, pathForTab, redirectFor, tabForPath, type Tab } from './services/routes';
@@ -8,17 +8,24 @@ import { supabaseConfigError } from './services/supabaseClient';
 import { purgeLegacyDemoData } from './services/legacyCleanup';
 import Navbar from './components/Navbar';
 import Auth from './components/Auth';
-import UserDashboard from './components/UserDashboard';
-import OwnerDashboard from './components/OwnerDashboard';
-import AdminDashboard from './components/AdminDashboard';
-import Community from './components/Community';
-import CommunityDetail from './components/CommunityDetail';
-import UserProfile from './components/UserProfile';
+// Screens load on demand, so the first page only ships what it needs.
+const UserDashboard = lazy(() => import('./components/UserDashboard'));
+const OwnerDashboard = lazy(() => import('./components/OwnerDashboard'));
+const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
+const Community = lazy(() => import('./components/Community'));
+const CommunityDetail = lazy(() => import('./components/CommunityDetail'));
+const UserProfile = lazy(() => import('./components/UserProfile'));
 import NotFound from './components/NotFound';
 
 // Earlier prototype builds stored a simulated login, demo accounts and
 // mock records in this browser. None of it is honoured or shown.
 purgeLegacyDemoData();
+
+const PageSpinner: React.FC = () => (
+  <div className="py-24 flex items-center justify-center" role="status" aria-label="Loading">
+    <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-b-4 border-neutral-900"></div>
+  </div>
+);
 
 /** /community/:groupId: the group is looked up (and its absence reported) by the screen itself. */
 const CommunityGroupRoute: React.FC<{ user: User; onBack: () => void; homeHref: string }> = ({
@@ -139,6 +146,7 @@ const App: React.FC = () => {
       />
 
       <main className="flex-1">
+        <Suspense fallback={<PageSpinner />}>
         <Routes>
           <Route path={ROUTES.home} element={renderDashboard()} />
           <Route path={ROUTES.owner} element={renderDashboard()} />
@@ -162,6 +170,7 @@ const App: React.FC = () => {
 
           <Route path="*" element={<NotFound homeHref={home} />} />
         </Routes>
+        </Suspense>
 
         {toast && (
           <div className="fixed bottom-6 right-6 bg-black text-white px-6 py-3 rounded-lg shadow-xl z-50 animate-in fade-in slide-in-from-bottom-5">

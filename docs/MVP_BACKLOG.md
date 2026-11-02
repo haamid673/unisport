@@ -57,10 +57,10 @@ Priority: **P0** blocks the MVP · **P1** needed for the MVP · **P2** polish / 
 | B-12 | P1 | In-app notifications (offer issued/expiring, hold expired, booking cancelled, facility approved/rejected, group/event approved) | 6 | one notification per event, correct user, survives reload |
 | B-13 | P1 | Owner: show status and rejection/suspension; clearer validation; booking list shows cancelled/expired | 3 | status always visible; no confusing states |
 | B-14 | P2 | Remove unreachable legacy code (`PaymentPage`, `bookingService`, `paymentService`, `facilityService`, `aiEngine`, the dead `payment` tab) **only after confirming nothing imports it**; no visible behaviour change | 7 | tests, lint, build green; no UI change |
-| B-15 | P1 | Production assets: replace Tailwind CDN with the build plugin, bundle icons and fonts, bundle or fall back for hotlinked images, split the bundle | 7 | built page needs no CDN style/script; size warning addressed |
+| B-15 | P1 | **Done.** Production assets: replace Tailwind CDN with the build plugin, bundle icons and fonts, bundle or fall back for hotlinked images, split the bundle | 7 | built page needs no CDN style/script; size warning addressed |
 | B-16 | P1 | Truthful README and filled `docs/*.md`; demo script; screenshots | 9 | each doc accurate against the code |
 | B-17 | P1 | Authenticated visual audit of every screen at desktop and phone width (the unauthenticated screen passed: no overflow at 375 px) | 2–3 | list of real defects, fixed without restyling |
-| B-18 | P2 | Hosted rollout runbook, CI migration-order guard | 7 | reviewed, not executed |
+| B-18 | P2 | **Done** (`docs/DEPLOYMENT_RUNBOOK.md`, `npm run guards`). Hosted rollout runbook, CI migration-order guard | 7 | reviewed, not executed |
 
 ## 3. Decisions this audit still needs
 
