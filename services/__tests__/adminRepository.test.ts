@@ -10,7 +10,9 @@ import {
   FIND_USER_RPC,
   SET_USER_ROLE_RPC,
   parseAdminUser,
+  mapAdminAction,
   mapAdminEvent,
+  LIST_ACTIONS_RPC,
   mapAdminGroup,
   LIST_GROUPS_RPC,
   LIST_EVENTS_RPC,
@@ -253,5 +255,33 @@ describe('community requests', () => {
     expect(nf.message).toBe(ADMIN_MESSAGES.eventNotFound);
     const dup = await failure(fakeClient({ rpc: { error: { code: 'UC005', message: 'x' } } }).repo.setGroupStatus(FAC, 'approved'));
     expect(dup.message).toBe(ADMIN_MESSAGES.groupNameTaken);
+  });
+});
+
+describe('audit trail', () => {
+  const row = { id: ID, admin_email: 'a@example.com', target_type: 'facility', target_label: 'Court',
+    old_value: 'pending', new_value: 'active', created_at: '2026-11-02T10:00:00Z' };
+
+  it('reads through the admin function, never the table', async () => {
+    const { repo, rpc, from } = fakeClient({ rpc: { data: [row] } });
+    expect(await repo.loadActions()).toEqual([
+      { id: ID, adminEmail: 'a@example.com', targetType: 'facility', targetLabel: 'Court',
+        oldValue: 'pending', newValue: 'active', createdAt: '2026-11-02T10:00:00Z' }
+    ]);
+    expect(rpc).toHaveBeenCalledWith(LIST_ACTIONS_RPC, { p_limit: 20 });
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('tolerates a removed account or label but rejects a malformed row', () => {
+    expect(mapAdminAction({ ...row, admin_email: null, target_label: null }).adminEmail).toBeNull();
+    expect(() => mapAdminAction({ ...row, target_type: 'bookings' })).toThrow(AdminError);
+    expect(() => mapAdminAction(null)).toThrow(AdminError);
+  });
+
+  it('reports a safe message and maps forbidden', async () => {
+    expect((await failure(fakeClient({ rpc: { data: null } }).repo.loadActions())).message).toBe(ADMIN_MESSAGES.actionsLoadFailed);
+    const odd = await failure(fakeClient({ rpc: { error: { code: 'XX000', message: 'secret' } } }).repo.loadActions());
+    expect(odd.message).toBe(ADMIN_MESSAGES.actionsLoadFailed);
+    expect((await failure(fakeClient({ rpc: { error: { code: '42501', message: 'x' } } }).repo.loadActions())).kind).toBe('forbidden');
   });
 });

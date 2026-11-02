@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useState, useEffect } from 'react';
-import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { User } from './types';
 import { ROUTES, communityPath, homePath, pathForTab, redirectFor, tabForPath, type Tab } from './services/routes';
 import { userService } from './services/userService';
@@ -17,6 +17,7 @@ const CommunityDetail = lazy(() => import('./components/CommunityDetail'));
 const UserProfile = lazy(() => import('./components/UserProfile'));
 import NotFound from './components/NotFound';
 import ResetPassword from './components/ResetPassword';
+import AboutDemo from './components/AboutDemo';
 import { PAYMENTS_AVAILABLE } from './services/razorpayCheckout';
 import { TEST_MODE_HEADLINE } from './services/demoPayments';
 
@@ -128,6 +129,9 @@ const App: React.FC = () => {
     return <ResetPassword onDone={() => navigate(ROUTES.home, { replace: true })} />;
   }
 
+  // Readable signed in or out, with a way back to the app.
+  if (location.pathname.replace(/\/+$/, '') === ROUTES.about) return <AboutDemo />;
+
   if (!user) return <Auth notice={authError} />;
 
   const renderDashboard = () => {
@@ -199,6 +203,9 @@ const App: React.FC = () => {
           <p className="text-xs text-neutral-600 font-bold uppercase tracking-widest">
             © {new Date().getFullYear()} UniSport
           </p>
+          <Link to={ROUTES.about} className="text-xs text-neutral-400 font-bold uppercase tracking-widest hover:text-orange-500 transition-colors">
+            About this demo
+          </Link>
           {PAYMENTS_AVAILABLE && (
             <p className="text-[10px] text-amber-400 font-bold uppercase tracking-widest">{TEST_MODE_HEADLINE}</p>
           )}

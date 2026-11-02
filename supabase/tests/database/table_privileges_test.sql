@@ -90,7 +90,8 @@ values
   ('public.group_members'),
   ('public.community_events'),
   ('public.event_participants'),
-  ('public.notifications');
+  ('public.notifications'),
+  ('public.admin_actions');
 
 
 -- ============================================================

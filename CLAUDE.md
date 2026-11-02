@@ -18,7 +18,8 @@ npm run guards:dist          # same + built output has no CDN (run after build)
 
 supabase start               # local Postgres/Auth, applies every migration
 supabase test db             # pgTAP suite, LOCAL STACK ONLY
-cd supabase/functions && deno test tests/      # payment Edge Function tests (not in CI)
+cd supabase/functions && deno test --allow-env --allow-net=127.0.0.1 tests/   # payment Edge Function tests
+SMOKE_EMAIL=... SMOKE_PASSWORD=... npm run smoke   # one Playwright journey against a running site (SMOKE_BASE_URL)
 ```
 
 Run a single pgTAP file against a disposable local stack with an **unlinked** workdir and an explicit `--db-url "postgresql://postgres:postgres@127.0.0.1:<port>/postgres?sslmode=disable"` (the `?sslmode=disable` is required).

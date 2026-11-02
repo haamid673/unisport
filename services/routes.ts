@@ -18,7 +18,8 @@ export const ROUTES = {
   communityGroup: '/community/:groupId',
   profile: '/profile',
   auth: '/auth',
-  resetPassword: '/reset-password'
+  resetPassword: '/reset-password',
+  about: '/about'
 } as const;
 
 export type Tab = 'dashboard' | 'community' | 'profile';

@@ -108,9 +108,11 @@ e2e/checkout-browser/     local browser run of the checkout UI against a mock
 - **No image upload.** Venue photos are bundled defaults per sport.
 - **Profile bio and preferences are saved in the browser only** (the form says
   so); name and phone are saved to the account.
-- **No admin audit trail or booking/payment oversight screens.**
-- **No automated browser tests**, and the Edge Function (Deno) tests are not
-  in CI. Features were verified in a real browser by hand.
+- **No booking or payment oversight screens** for administrators (the
+  Governance Center has an audit trail of venue, community, event and role
+  decisions).
+- **Browser testing is light:** one Playwright smoke journey, run by hand.
+  Other features were verified in a real browser by hand.
 - **Not deployed anywhere.** The hosted plan is written, not executed:
   [docs/DEPLOYMENT_RUNBOOK.md](docs/DEPLOYMENT_RUNBOOK.md).
 

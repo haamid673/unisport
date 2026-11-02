@@ -3,6 +3,7 @@ import {
   adminRepository,
   toAdminError,
   USER_ROLES,
+  type AdminAction,
   type AdminEvent,
   type AdminFacility,
   type AdminGroup,
@@ -87,6 +88,13 @@ const StatusBadge: React.FC<{ status: FacilityRecordStatus }> = ({ status }) => 
   );
 };
 
+const ACTION_TARGET_LABEL: Record<AdminAction['targetType'], string> = {
+  facility: 'Venue',
+  group: 'Community',
+  event: 'Event',
+  user: 'Account'
+};
+
 interface AdminDashboardProps {
   user: User;
 }
@@ -103,6 +111,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
     | { phase: 'loading' }
     | { phase: 'error'; message: string }
     | { phase: 'ready'; groups: AdminGroup[]; events: AdminEvent[] }
+  >({ phase: 'loading' });
+
+  const [actionsView, setActionsView] = useState<
+    | { phase: 'loading' }
+    | { phase: 'error'; message: string }
+    | { phase: 'ready'; actions: AdminAction[] }
   >({ phase: 'loading' });
 
   const [notice, setNotice] = useState<Notice>(null);
@@ -152,6 +166,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
       })
       .catch(err => {
         if (!cancelled) setCommunityView({ phase: 'error', message: toAdminError(err).message });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user.id, reloadKey]);
+
+  // The audit trail, re-read after every action.
+  useEffect(() => {
+    let cancelled = false;
+
+    setActionsView(prev => (prev.phase === 'ready' ? prev : { phase: 'loading' }));
+
+    adminRepository
+      .loadActions()
+      .then(actions => {
+        if (!cancelled) setActionsView({ phase: 'ready', actions });
+      })
+      .catch(err => {
+        if (!cancelled) setActionsView({ phase: 'error', message: toAdminError(err).message });
       });
 
     return () => {
@@ -235,6 +269,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         setNotice({ type: 'error', text: toAdminError(err, 'user').message });
       } finally {
         setBusyKey(null);
+        setReloadKey(k => k + 1);
       }
     });
   };
@@ -463,6 +498,45 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                   ))}
                 </ul>
               </>
+            )}
+          </section>
+
+          <section className="bg-white p-6 rounded-xl border-2 border-neutral-100" aria-labelledby="actions-heading">
+            <h3 id="actions-heading" className="font-black uppercase text-lg mb-4">
+              Recent actions
+            </h3>
+
+            {actionsView.phase === 'loading' && (
+              <p className="text-neutral-400 text-xs font-bold uppercase">Loading actions…</p>
+            )}
+
+            {actionsView.phase === 'error' && (
+              <div role="alert" className="p-4 bg-red-50 border border-red-200">
+                <p className="text-xs font-bold text-red-700">{actionsView.message}</p>
+                <button onClick={() => setReloadKey(k => k + 1)} className={`${secondaryButton} mt-3`}>
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {actionsView.phase === 'ready' && actionsView.actions.length === 0 && (
+              <p className="text-neutral-400 text-xs font-bold uppercase">No administrator actions yet.</p>
+            )}
+
+            {actionsView.phase === 'ready' && actionsView.actions.length > 0 && (
+              <ul className="divide-y divide-neutral-100">
+                {actionsView.actions.map(a => (
+                  <li key={a.id} className="py-3">
+                    <p className="text-xs font-bold text-neutral-900">
+                      <span className="uppercase text-neutral-400">{ACTION_TARGET_LABEL[a.targetType]}</span>{' '}
+                      {a.targetLabel ?? 'Unknown'}: {a.oldValue ?? '?'} → {a.newValue ?? '?'}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-neutral-400 break-all">
+                      {a.adminEmail ?? 'Unknown administrator'} · {new Date(a.createdAt).toLocaleString()}
+                    </p>
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
         </div>

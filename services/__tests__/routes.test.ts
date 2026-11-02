@@ -71,6 +71,14 @@ describe('reset-password route', () => {
   });
 });
 
+describe('about route', () => {
+  it('exists, is not a tab, and never redirects', () => {
+    expect(ROUTES.about).toBe('/about');
+    expect(tabForPath('/about')).toBeNull();
+    for (const r of roles) expect(redirectFor(r, '/about')).toBeNull();
+  });
+});
+
 describe('redirectFor', () => {
   it('never redirects a role away from a page it can use', () => {
     expect(redirectFor('user', '/')).toBeNull();

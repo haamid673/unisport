@@ -60,6 +60,31 @@ jobs:
       - name: Built output guard
         run: npm run guards:dist
 
+  edge-functions:
+    name: Edge Functions (Deno)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: 2.9.3
+
+      # All HTTP is mocked or local: Razorpay is never contacted, and the
+      # suites that need a running stack skip themselves without their env.
+      - name: Payment Edge Function tests
+        working-directory: supabase/functions
+        run: deno test --allow-env --allow-net=127.0.0.1 tests/
+
+      - name: Payment simulator tests
+        working-directory: supabase/payment-simulator
+        run: deno test --allow-net=127.0.0.1 simulator_test.ts
+
   database:
     name: Database (migrations + pgTAP)
     runs-on: ubuntu-24.04

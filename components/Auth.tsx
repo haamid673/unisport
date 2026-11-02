@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { authService } from '../services/authService';
+import { Link } from 'react-router-dom';
+import { authService, MIN_PASSWORD_LENGTH } from '../services/authService';
+import { ROUTES } from '../services/routes';
 
 interface AuthProps {
   /**
@@ -72,6 +74,11 @@ const Auth: React.FC<AuthProps> = ({ notice }) => {
 
       if (!isValidPhoneNumber(phone)) {
         setError('Please enter a valid phone number.');
+        return;
+      }
+
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        setError(`Please use a password of at least ${MIN_PASSWORD_LENGTH} characters.`);
         return;
       }
 
@@ -292,6 +299,12 @@ const Auth: React.FC<AuthProps> = ({ notice }) => {
             </button>
           )}
         </form>
+
+        <p className="mt-6 text-center">
+          <Link to={ROUTES.about} className="text-[11px] font-black uppercase tracking-widest text-neutral-400 hover:text-orange-600 transition-colors">
+            About this demo
+          </Link>
+        </p>
       </div>
     </div>
   );

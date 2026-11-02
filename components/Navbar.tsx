@@ -87,6 +87,8 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, activeTab, setActiveTab
             <NotificationBell userId={user.id} />
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
+              aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={isMenuOpen}
               className="text-neutral-900 hover:text-orange-600 focus:outline-none p-2"
             >
               <i className={`fas ${isMenuOpen ? 'fa-times' : 'fa-bars'} text-2xl`}></i>

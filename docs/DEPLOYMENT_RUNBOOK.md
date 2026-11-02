@@ -233,3 +233,24 @@ Monitor: Auth and database logs in the dashboard, cron job run history
 (`cron.job_run_details`), error rate in the host. Schedule: dependency updates,
 a periodic `npm audit`, and a review of Auth rate limits. Email, SMS and push
 notifications remain out of scope for the MVP (see `docs/MVP_BACKLOG.md`).
+
+## 11. Public demo additions
+
+For the demo plan (`docs/PRODUCTION_DEMO_PLAN.md`):
+
+- **Accounts and data:** after the migrations and the first administrator,
+  create `owner@unisport-demo.test` and `player@unisport-demo.test` in
+  Authentication → Users (Add user, Auto Confirm, generated passwords), then run
+  `supabase/demo/seed_demo.sql` and `supabase/demo/nightly_cleanup.sql` in the
+  SQL editor. Administrator credentials are never published.
+- **Auth settings:** minimum password length 8 (matches the app); email
+  confirmations off for the demo; review the sign-up and email rate limits, and
+  remember the built-in sender is very low-volume.
+- **Bot protection (optional):** Cloudflare Turnstile on sign-up, if the site
+  attracts abuse. Not enabled by default.
+- **Headers:** `public/_headers` ships in the build and already names the
+  demo's Supabase project in `connect-src`. Change it if the project changes.
+  With no `404.html`, Cloudflare Pages applies its SPA fallback, so no redirect
+  rule is needed.
+- **After deploying:** `SMOKE_BASE_URL=<site> SMOKE_EMAIL=... SMOKE_PASSWORD=...
+  npm run smoke` with a throwaway player.

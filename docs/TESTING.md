@@ -5,9 +5,10 @@ rules.
 
 | Layer | Tool | What it covers | Size at the last full run |
 |---|---|---|---|
-| Unit and source-shape | Vitest | repositories (fake client), pure helpers, screens' structure (guards, states, no local data, no `alert()`), routes, guard scripts | 39 files, 678 tests |
-| Database | pgTAP via `supabase test db` | every table privilege, RLS rule, function refusal and happy path; the multi-session suites drive real concurrent interleavings | 36 files, 1,434 assertions |
-| Edge Functions | Deno | payment functions against the local simulator; the simulator itself | ~180 + 27 tests (last recorded in Phase 0) |
+| Unit and source-shape | Vitest | repositories (fake client), pure helpers, screens' structure (guards, states, no local data, no `alert()`), routes, guard scripts | 42 files, 705 tests |
+| Database | pgTAP via `supabase test db` | every table privilege, RLS rule, function refusal and happy path; the multi-session suites drive real concurrent interleavings | 37 files, 1,460 assertions |
+| Edge Functions | Deno | payment functions against the local simulator; the simulator itself | 180 + 27 tests (17 stack-only tests skip without their env) |
+| Browser smoke | Playwright (`npm run smoke`, on demand, uses installed Chrome) | sign in, reserve, cancel, history, role redirect, no CDN requests, no failed requests | 1 journey |
 | Repository guards | `npm run guards` | migration order and append-only, secrets, no hosted commands, env names, no CDN in `dist/` | 12 unit tests + the checks themselves |
 
 Source-shape tests read a component's source and assert properties (for
@@ -55,8 +56,8 @@ The Edge Function and simulator tests run with Deno from their folders; see
 `.github/workflows/ci.yml` runs on every pull request: install (`npm ci`),
 repository guards, unit tests, lint, build, the built-output guard, then a
 second job that starts a disposable Postgres, applies every migration and
-runs `supabase test db`. No project is linked and no secret is used. The
-Deno suites are not in CI yet.
+runs `supabase test db`, and a third that runs the Deno suites. No project is
+linked and no secret is used.
 
 ## Manual checks (recorded)
 
@@ -70,6 +71,5 @@ log of [COMPLETION_PLAN.md](COMPLETION_PLAN.md); the repeatable script is
 
 ## Known gaps
 
-No automated browser (end-to-end) suite exists: adding one means new
-dependencies and browser downloads. No test runs against a hosted project, by
+The browser smoke test covers one journey and is run by hand, not in CI. No test runs against a hosted project, by
 design. Visual regressions are checked by eye.

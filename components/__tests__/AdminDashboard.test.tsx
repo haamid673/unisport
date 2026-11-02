@@ -70,4 +70,13 @@ describe('AdminDashboard', () => {
   it('says when an event\'s community is not approved yet', () => {
     expect(source).toContain('Its community is not approved yet');
   });
+
+  it('shows the audit trail, with its own error state, re-read after every action', () => {
+    expect(source).toMatch(/adminRepository\s*\.loadActions\(\)/);
+    expect(source).toContain('Recent actions');
+    expect(source).toContain('No administrator actions yet.');
+    expect(source).toMatch(/actionsView\.phase === 'error'/);
+    // a role change refreshes it too
+    expect(source).toMatch(/toAdminError\(err, 'user'\)\.message \}\);\s*\} finally \{\s*setBusyKey\(null\);\s*setReloadKey/);
+  });
 });

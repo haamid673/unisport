@@ -29,6 +29,7 @@ export const LIST_GROUPS_RPC = 'admin_list_community_groups';
 export const LIST_EVENTS_RPC = 'admin_list_community_events';
 export const SET_GROUP_STATUS_RPC = 'admin_set_group_status';
 export const SET_EVENT_STATUS_RPC = 'admin_set_event_status';
+export const LIST_ACTIONS_RPC = 'admin_list_actions';
 
 export type ApprovalDecision = 'pending' | 'approved' | 'rejected';
 const APPROVAL_DECISIONS: readonly ApprovalDecision[] = ['pending', 'approved', 'rejected'];
@@ -108,6 +109,17 @@ export interface AdminEvent {
   createdAt: string;
 }
 
+/** One recorded administrator action, newest first. */
+export interface AdminAction {
+  id: string;
+  adminEmail: string | null;
+  targetType: 'facility' | 'group' | 'event' | 'user';
+  targetLabel: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  createdAt: string;
+}
+
 export const ADMIN_MESSAGES = {
   unauthenticated: 'Your session has expired. Please sign in again.',
   forbidden: 'Only administrators can do this.',
@@ -120,6 +132,7 @@ export const ADMIN_MESSAGES = {
   unknown: 'That did not work. Check the current state before trying again.',
   loadFailed: 'Could not load the venues. Please try again.',
   communityLoadFailed: 'Could not load the community requests. Please try again.',
+  actionsLoadFailed: 'Could not load the recent actions. Please try again.',
   groupNotFound: 'That community no longer exists. Refresh the list.',
   eventNotFound: 'That event no longer exists. Refresh the list.',
   groupNameTaken: 'Another community with that name already exists in this city, so this one cannot be approved.',
@@ -301,6 +314,29 @@ export function mapAdminEvent(row: unknown): AdminEvent {
   };
 }
 
+const ACTION_TARGETS: readonly AdminAction['targetType'][] = ['facility', 'group', 'event', 'user'];
+const textOrNull = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+
+export function mapAdminAction(row: unknown): AdminAction {
+  const r = asRecord(row);
+  if (
+    typeof r?.id !== 'string' ||
+    typeof r.created_at !== 'string' ||
+    !ACTION_TARGETS.includes(r.target_type as AdminAction['targetType'])
+  ) {
+    throw new AdminError('unknown', ADMIN_MESSAGES.actionsLoadFailed);
+  }
+  return {
+    id: r.id,
+    adminEmail: textOrNull(r.admin_email),
+    targetType: r.target_type as AdminAction['targetType'],
+    targetLabel: textOrNull(r.target_label),
+    oldValue: textOrNull(r.old_value),
+    newValue: textOrNull(r.new_value),
+    createdAt: r.created_at
+  };
+}
+
 export function createAdminRepository(getClient: () => SupabaseClient) {
   async function requireClient(): Promise<SupabaseClient> {
     let client: SupabaseClient;
@@ -436,6 +472,19 @@ export function createAdminRepository(getClient: () => SupabaseClient) {
       const data = await call(client, SET_EVENT_STATUS_RPC, { p_event_id: eventId, p_status: status }, 'event');
       if (data !== status) throw new AdminError('unknown', ADMIN_MESSAGES.unknown);
       return status;
+    },
+
+    /** The audit trail, newest first. */
+    async loadActions(limit = 20): Promise<AdminAction[]> {
+      const client = await requireClient();
+      try {
+        const data = await call(client, LIST_ACTIONS_RPC, { p_limit: limit }, 'facility');
+        if (!Array.isArray(data)) throw new AdminError('unknown', ADMIN_MESSAGES.actionsLoadFailed);
+        return data.map(mapAdminAction);
+      } catch (err) {
+        const mapped = toAdminError(err);
+        throw mapped.kind === 'unknown' ? new AdminError('unknown', ADMIN_MESSAGES.actionsLoadFailed) : mapped;
+      }
     },
 
     /** Resolves with the role the database now holds, which must be the one asked for. */
