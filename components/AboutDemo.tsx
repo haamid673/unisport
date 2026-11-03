@@ -22,7 +22,7 @@ const AboutDemo: React.FC = () => (
           <h2 className="font-black uppercase text-neutral-900 mb-1">No real money</h2>
           <p>
             Where payment is switched on, it runs in Razorpay test mode: Razorpay simulates the payment and nothing is
-            charged. Use only the published test card shown in the app. Never enter a real card, UPI ID or bank detail.
+            charged. Use only the test options described in the app (choose Wallet and pick Success). Never enter a real card, UPI ID or bank detail.
           </p>
         </section>
         <section>
