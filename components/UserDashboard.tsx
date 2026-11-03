@@ -6,6 +6,7 @@ import {
 } from '../services/facilityRepository';
 import {
   getLeaveControl,
+  getOfferAction,
   getSlotAction,
   getWaitlistAction,
   holdsSlot,
@@ -33,15 +34,23 @@ import {
   RESERVATIONS_ENABLED,
   effectiveStatus,
   toBookingError,
+  toCancelError,
   UserBooking
 } from '../services/bookingRepository';
 import {
   waitlistRepository,
   toWaitlistError,
   effectiveWaitlistStatus,
+  isLiveOffer,
   WaitlistEntry
 } from '../services/waitlistRepository';
 import { userService } from '../services/userService';
+import { defaultBookingDate } from '../services/bookingDate';
+import TestModeNotice from './TestModeNotice';
+import { PAYMENTS_AVAILABLE } from '../services/razorpayCheckout';
+import { hasUnresolvedPayment, newCheckoutCertainlyRefused, onBookingPaymentChange } from '../services/bookingCheckout';
+import { fetchOpenAttemptLeases, type AttemptLeaseFacts } from '../services/paymentClient';
+import BookingPaymentPanel from './BookingPaymentPanel';
 import { Facility, Slot, User, AIRecommendation, SelectedAmenity } from '../types';
 
 interface UserDashboardProps {
@@ -54,7 +63,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [allSlots, setAllSlots] = useState<Slot[]>([]);
 
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(() => defaultBookingDate());
   const [selectedSport, setSelectedSport] = useState<string>('All');
   // The chosen city's display name. Matching always goes through the
   // normalised key (see services/cityFilter), so every spelling of a
@@ -72,6 +81,17 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
     | { phase: 'ready'; bookings: UserBooking[] }
   >({ phase: 'loading' });
   const [bookingsReloadKey, setBookingsReloadKey] = useState(0);
+  // The held booking being paid or checked from Your Schedule
+  // (test-mode checkout), and which of the two the customer asked for.
+  const [scheduleBookingId, setScheduleBookingId] = useState<string | null>(null);
+  const [scheduleAction, setScheduleAction] = useState<'pay' | 'check'>('pay');
+
+  // A payment answer (or an unresolved payment) for any booking re-reads
+  // the bookings, even when the panel that asked has been unmounted.
+  useEffect(
+    () => onBookingPaymentChange(() => setBookingsReloadKey(k => k + 1)),
+    []
+  );
 
   // Reservation request state. The single-flight guard is the
   // synchronous lock that stops a double click or double tap from
@@ -83,6 +103,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
     | { phase: 'submitting'; slotId: string }
     | {
         phase: 'success';
+        bookingId: string;
         facilityName: string;
         date: string;
         time: string;
@@ -110,6 +131,18 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
     | { phase: 'error'; message: string }
   >({ phase: 'idle' });
 
+  // Cancelling an unpaid hold from Your Schedule: one at a time (enforced
+  // synchronously), asked twice (confirm) so a stray tap cannot release a
+  // slot the customer wanted.
+  const cancelGuard = useRef(createSingleFlight());
+  const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
+  const [cancelFlow, setCancelFlow] = useState<
+    | { phase: 'idle' }
+    | { phase: 'submitting'; bookingId: string }
+    | { phase: 'success'; message: string }
+    | { phase: 'error'; message: string }
+  >({ phase: 'idle' });
+
   // Re-render clock so offers and holds visibly lapse without a reload.
   const [clock, setClock] = useState(() => Date.now());
   const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
@@ -131,6 +164,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
   // between a date change and the next read the previous date's
   // statuses are never shown (or acted on) for the new one.
   const [availabilityReloadKey, setAvailabilityReloadKey] = useState(0);
+  // Quiet refresh while the slot picker stays open: bumped by a slow
+  // timer and by returning to the tab. It is NOT part of availabilityKey,
+  // so the rows keep their last answer while it is re-read instead of
+  // flashing "loading".
+  const [availabilityRefreshTick, setAvailabilityRefreshTick] = useState(0);
+  const quietRefresh = useRef(false);
   const [availabilityState, setAvailabilityState] = useState<{
     key: string;
     view: AvailabilityView;
@@ -239,6 +278,8 @@ const calculateDistanceKm = (
 
   let cancelled = false;
   const key = availabilityKey;
+  const quiet = quietRefresh.current;
+  quietRefresh.current = false;
 
   facilityRepository
     .loadSlotAvailability(selectedFacility.id, selectedDate)
@@ -248,6 +289,10 @@ const calculateDistanceKm = (
     })
     .catch(err => {
       if (cancelled) return;
+      // A failed background refresh keeps the last answer; the booking
+      // call itself is still decided by the database. Only a read the
+      // customer is waiting on shows an error.
+      if (quiet) return;
       setAvailabilityState({
         key,
         view: {
@@ -263,7 +308,37 @@ const calculateDistanceKm = (
   return () => {
     cancelled = true;
   };
-}, [user.id, selectedFacility?.id, selectedDate, availabilityReloadKey]);
+}, [user.id, selectedFacility?.id, selectedDate, availabilityReloadKey, availabilityRefreshTick]);
+
+ // While a venue's slots are on screen, re-read them about once a minute
+ // and when the customer comes back to the tab, so a slot someone else
+ // booked or released does not stay stale. Bounded: nothing runs for a
+ // hidden tab, and a focus never re-reads sooner than 15 s after the last.
+ const hasOpenFacility = Boolean(selectedFacility);
+ useEffect(() => {
+  if (!hasOpenFacility) return;
+
+  let last = Date.now();
+  const refresh = () => {
+    if (document.visibilityState === 'hidden') return;
+    last = Date.now();
+    quietRefresh.current = true;
+    setAvailabilityRefreshTick(k => k + 1);
+  };
+  const onReturn = () => {
+    if (Date.now() - last >= 15_000) refresh();
+  };
+
+  const timer = setInterval(refresh, 60_000);
+  window.addEventListener('focus', onReturn);
+  document.addEventListener('visibilitychange', onReturn);
+
+  return () => {
+    clearInterval(timer);
+    window.removeEventListener('focus', onReturn);
+    document.removeEventListener('visibilitychange', onReturn);
+  };
+}, [hasOpenFacility]);
 
   // Real bookings, read through the repository. Reloaded after every
   // reservation attempt and on Retry.
@@ -290,6 +365,23 @@ const calculateDistanceKm = (
       cancelled = true;
     };
   }, [user.id, bookingsReloadKey]);
+
+  // Checkout-lease facts of the held bookings (the customer's own open
+  // attempts). Used only to stop offering Pay where the server will
+  // certainly refuse a new Checkout from this page; unknown facts (null)
+  // change nothing.
+  const [leaseFacts, setLeaseFacts] = useState<Map<string, AttemptLeaseFacts[]> | null>(null);
+  useEffect(() => {
+    if (!PAYMENTS_AVAILABLE || bookingsView.phase !== 'ready') return;
+    let cancelled = false;
+    const held = bookingsView.bookings.filter(b => effectiveStatus(b) === 'pending_payment').map(b => b.id);
+    void fetchOpenAttemptLeases(held).then(facts => {
+      if (!cancelled) setLeaseFacts(facts);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingsView]);
 
   // Real waitlist entries, through the repository. Refreshed after every
   // mutation, on Retry and once a minute, because offers are issued by
@@ -400,6 +492,33 @@ const calculateDistanceKm = (
     holdScope.current = { scope, count: liveHoldCount };
   }, [liveHoldCount, selectedFacility?.id, selectedDate]);
 
+  // Live waitlist offers the user holds for the open facility and date,
+  // judged by the clock (the clock tick re-evaluates this every 15 s).
+  // When one lapses (or is accepted or left) the slot's state changes on
+  // the server, so re-read the waitlist and the availability once. This
+  // is not polling: it fires only on a drop.
+  const liveOfferCount: number | null =
+    selectedFacility && waitlistView.phase === 'ready'
+      ? waitlistView.entries.filter(
+          e =>
+            e.facilityId === selectedFacility.id &&
+            e.bookingDate === selectedDate &&
+            isLiveOffer(e, new Date(clock))
+        ).length
+      : null;
+
+  const offerScope = useRef({ scope: '', count: 0 });
+  useEffect(() => {
+    if (liveOfferCount === null) return;
+
+    const scope = `${selectedFacility?.id ?? ''}|${selectedDate}`;
+    if (offerScope.current.scope === scope && liveOfferCount < offerScope.current.count) {
+      setWaitlistReloadKey(k => k + 1);
+      setAvailabilityReloadKey(k => k + 1);
+    }
+    offerScope.current = { scope, count: liveOfferCount };
+  }, [liveOfferCount, selectedFacility?.id, selectedDate]);
+
   // A finished notice belongs to the context it was produced in. Clear
   // finished booking and waitlist notices when that context changes
   // (another facility or date, or the picker closing). A request still
@@ -445,6 +564,7 @@ const handleBook = async (slot: Slot) => {
 
       setBookingFlow({
         phase: 'success',
+        bookingId: created.bookingId,
         facilityName: facility.name,
         date,
         time: slot.time,
@@ -533,7 +653,41 @@ const handleAcceptOffer = (entry: WaitlistEntry) => {
       minute: '2-digit'
     });
 
-    return `Offer accepted. The slot is held until ${until} for ₹${accepted.amount}. Payment is not available yet, so the hold expires automatically.`;
+    return PAYMENTS_AVAILABLE
+      ? `Offer accepted. The slot is held until ${until} for ₹${accepted.amount}. Pay from Your Schedule before the hold expires.`
+      : `Offer accepted. The slot is held until ${until} for ₹${accepted.amount}. Payment is not available yet, so the hold expires automatically.`;
+  });
+};
+
+// Cancels the customer's own unpaid hold. The database decides: success
+// is reported only from its answer, and bookings, availability and the
+// waitlist are re-read afterwards whatever happened.
+const handleCancelHold = (booking: UserBooking) => {
+  if (cancelGuard.current.busy) return;
+
+  void cancelGuard.current.run(async () => {
+    setCancelConfirmId(null);
+    setCancelFlow({ phase: 'submitting', bookingId: booking.id });
+
+    try {
+      const outcome = await bookingRepository.cancelBooking(booking.id);
+      setCancelFlow({
+        phase: 'success',
+        message:
+          outcome === 'cancelled'
+            ? 'Reservation cancelled. The slot is free again.'
+            : 'That reservation had already expired, so there was nothing to cancel.'
+      });
+    } catch (err) {
+      setCancelFlow({
+        phase: 'error',
+        message: toCancelError(err).message
+      });
+    } finally {
+      setBookingsReloadKey(k => k + 1);
+      setAvailabilityReloadKey(k => k + 1);
+      setWaitlistReloadKey(k => k + 1);
+    }
   });
 };
 
@@ -847,8 +1001,18 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
               {/* Slots List + Amenities */}
               <div className="flex-1 overflow-y-auto p-8 pt-4 min-h-0">
                 <div className="mb-4 p-3 bg-neutral-50 border border-neutral-200 text-[10px] font-bold uppercase tracking-wide text-neutral-500">
-                  Reserving holds a slot for 10 minutes. Online payment is not
-                  available yet, so an unpaid reservation expires automatically.
+                  {PAYMENTS_AVAILABLE ? (
+                    <>
+                      Reserving holds a slot for 10 minutes. Pay online (Razorpay
+                      test mode) before it ends; an unpaid reservation expires
+                      automatically.
+                    </>
+                  ) : (
+                    <>
+                      Reserving holds a slot for 10 minutes. Online payment is not
+                      available yet, so an unpaid reservation expires automatically.
+                    </>
+                  )}
                 </div>
                 <div aria-live="polite">
                   {bookingFlow.phase === 'success' && (
@@ -868,8 +1032,15 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
                           hour: '2-digit',
                           minute: '2-digit'
                         })}{' '}
-                        · ₹{bookingFlow.amount} · payment is not available yet
+                        · ₹{bookingFlow.amount}
+                        {PAYMENTS_AVAILABLE ? ' · unpaid' : ' · payment is not available yet'}
                       </p>
+                      {PAYMENTS_AVAILABLE && (
+                        <BookingPaymentPanel
+                          key={bookingFlow.bookingId}
+                          bookingId={bookingFlow.bookingId}
+                        />
+                      )}
                     </div>
                   )}
                   {bookingFlow.phase === 'error' && (
@@ -923,6 +1094,25 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
                         ownHold || bookingsView.phase === 'loading'
                       );
                       const ownHoldLabel = showsOwnHold(s, availability, ownHold);
+                      // The user's own LIVE offer for this slot and date. The
+                      // availability read leaves it out on purpose, so without
+                      // this the holder would see a generic "Book".
+                      const offerAction = getOfferAction(
+                        s,
+                        availability,
+                        activeWaitlist,
+                        selectedDate,
+                        new Date(clock)
+                      );
+                      const offerEntry = offerAction.entry;
+                      const offerUntil =
+                        offerAction.expiresAt !== null
+                          ? new Date(offerAction.expiresAt).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })
+                          : null;
+                      const canAcceptOffer = offerAction.visible && !isSubmitting && !waitlistBusy;
                       const joining =
                         waitlistFlow.phase === 'submitting' &&
                         waitlistFlow.target === `join:${s.id}`;
@@ -963,23 +1153,36 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleBook(s);
+                                // A live offer is taken through the existing
+                                // accept flow, never through a second booking path.
+                                if (offerAction.visible && offerEntry) handleAcceptOffer(offerEntry);
+                                else handleBook(s);
                               }}
-                              disabled={!canBook}
-                              aria-busy={isThisSlot}
+                              disabled={offerAction.visible ? !canAcceptOffer : !canBook}
+                              aria-busy={isThisSlot || (offerAction.visible && waitlistBusy)}
                               aria-label={
-                                action.bookable
-                                  ? `Reserve ${s.time}`
-                                  : `${s.time}: ${action.label}`
+                                offerAction.visible
+                                  ? `${offerAction.ariaLabel}${offerUntil ? `, open until ${offerUntil}` : ''}`
+                                  : action.bookable
+                                    ? `Reserve ${s.time}`
+                                    : `${s.time}: ${action.label}`
                               }
                               className={`px-6 py-2 rounded-md text-xs font-black uppercase tracking-widest transition-all ${
-                                canBook
+                                (offerAction.visible ? canAcceptOffer : canBook)
                                   ? 'bg-black text-white group-hover:bg-orange-600'
                                   : 'bg-neutral-300 text-neutral-500 cursor-not-allowed'
                               }`}
                             >
-                              {isThisSlot ? 'Reserving…' : action.label}
+                              {offerAction.visible
+                                ? (waitlistBusy ? 'Accepting…' : offerAction.label)
+                                : isThisSlot ? 'Reserving…' : action.label}
                             </button>
+
+                            {offerAction.visible && offerUntil && (
+                              <span className="text-[10px] font-black uppercase tracking-widest text-orange-600">
+                                Offer until {offerUntil}
+                              </span>
+                            )}
 
                             {ownHoldLabel && (
                               <span className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-500">
@@ -987,7 +1190,7 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
                               </span>
                             )}
 
-                            {waitlistAction.visible && (
+                            {waitlistAction.visible && !offerAction.visible && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1290,6 +1493,43 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
           <div className="bg-white p-6 rounded-xl border-2 border-neutral-100 sticky top-8">
             <h4 className="font-black uppercase text-lg mb-6">Your Schedule</h4>
 
+            {PAYMENTS_AVAILABLE && (
+              <div className="mb-4">
+                <TestModeNotice />
+              </div>
+            )}
+
+            {PAYMENTS_AVAILABLE && scheduleBookingId && (
+              <div className="mb-4 p-3 border border-neutral-200 rounded-lg">
+                <p className="text-[10px] font-black uppercase tracking-wide text-neutral-500">
+                  Payment (test mode)
+                </p>
+                <BookingPaymentPanel
+                  key={`${scheduleBookingId}:${scheduleAction}`}
+                  bookingId={scheduleBookingId}
+                  autoStart={scheduleAction}
+                  onClose={() => setScheduleBookingId(null)}
+                />
+              </div>
+            )}
+
+            <div aria-live="polite">
+              {cancelFlow.phase === 'success' && (
+                <div role="status" className="mb-4 p-3 bg-emerald-50 border border-emerald-200">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">
+                    {cancelFlow.message}
+                  </p>
+                </div>
+              )}
+              {cancelFlow.phase === 'error' && (
+                <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-200">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-red-700">
+                    {cancelFlow.message}
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-4" aria-live="polite">
               {bookingsView.phase === 'loading' && (
                 <p className="text-neutral-400 text-xs font-bold uppercase">
@@ -1320,6 +1560,17 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
               {bookingsView.phase === 'ready' &&
                 scheduleBookings.map(b => {
                   const held = effectiveStatus(b) === 'pending_payment';
+                  // A Checkout was opened for this hold from another page (or
+                  // before a reload): the server would refuse a new one here.
+                  const openedElsewhere =
+                    held && newCheckoutCertainlyRefused(b.id, leaseFacts ? leaseFacts.get(b.id) ?? [] : undefined);
+                  // Cancel is offered only while nothing is paying this hold; the
+                  // database refuses it too if a payment is in flight.
+                  const cancelling = cancelFlow.phase === 'submitting' && cancelFlow.bookingId === b.id;
+                  const canCancel =
+                    held &&
+                    scheduleBookingId !== b.id &&
+                    !(PAYMENTS_AVAILABLE && (hasUnresolvedPayment(b.id) || openedElsewhere));
 
                   return (
                     <div
@@ -1345,13 +1596,87 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
                             : 'bg-emerald-100 text-emerald-700'
                         }`}
                       >
-                        {held && b.expiresAt
-                          ? `Held until ${new Date(b.expiresAt).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}`
+                        {held
+                          ? b.expiresAt
+                            ? `Held until ${new Date(b.expiresAt).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}`
+                            : 'Unpaid hold'
                           : 'Confirmed'}
                       </p>
+
+                      {PAYMENTS_AVAILABLE && held && scheduleBookingId !== b.id && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {openedElsewhere && (
+                            <p className="w-full text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                              A payment window was already opened for this hold. Check its status; a new payment cannot be started.
+                            </p>
+                          )}
+                          {/* No Pay while a payment of this booking may be in progress */}
+                          {!hasUnresolvedPayment(b.id) && !openedElsewhere && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setScheduleAction('pay');
+                                setScheduleBookingId(b.id);
+                              }}
+                              className="px-4 py-2 bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-md hover:bg-orange-600 transition-all"
+                            >
+                              Pay now (test mode)
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setScheduleAction('check');
+                              setScheduleBookingId(b.id);
+                            }}
+                            className="px-4 py-2 bg-white border border-neutral-300 text-[10px] font-black uppercase tracking-widest rounded-md hover:border-black transition-all"
+                          >
+                            Check payment
+                          </button>
+                        </div>
+                      )}
+
+                      {canCancel && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {cancelConfirmId === b.id && !cancelling ? (
+                            <>
+                              <p className="w-full text-[10px] font-bold uppercase tracking-wide text-neutral-600">
+                                Cancel this reservation? The slot will be released.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => handleCancelHold(b)}
+                                className="px-4 py-2 bg-red-600 text-white text-[10px] font-black uppercase tracking-widest rounded-md hover:bg-red-700 transition-all"
+                              >
+                                Yes, cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCancelConfirmId(null)}
+                                className="px-4 py-2 bg-white border border-neutral-300 text-[10px] font-black uppercase tracking-widest rounded-md hover:border-black transition-all"
+                              >
+                                Keep it
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={cancelFlow.phase === 'submitting'}
+                              aria-busy={cancelling}
+                              onClick={() => {
+                                setCancelFlow({ phase: 'idle' });
+                                setCancelConfirmId(b.id);
+                              }}
+                              className="px-4 py-2 bg-white border border-neutral-300 text-[10px] font-black uppercase tracking-widest rounded-md hover:border-red-600 hover:text-red-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {cancelling ? 'Cancelling…' : 'Cancel reservation'}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1438,8 +1763,17 @@ const [selectedAmenities, setSelectedAmenities] = useState<SelectedAmenity[]>([]
 
                         {offered && (
                           <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-neutral-500">
-                            Accepting holds the slot for 10 minutes. Payment is
-                            not available yet.
+                            {PAYMENTS_AVAILABLE ? (
+                              <>
+                                Accepting holds the slot for 10 minutes. Pay from
+                                Your Schedule before it ends.
+                              </>
+                            ) : (
+                              <>
+                                Accepting holds the slot for 10 minutes. Payment is
+                                not available yet.
+                              </>
+                            )}
                           </p>
                         )}
 

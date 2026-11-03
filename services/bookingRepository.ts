@@ -18,8 +18,10 @@ import { formatSlotTime } from './facilityRepository';
  *    INSERT, and the client never supplies a price: the amount, the
  *    hold window and the status come from the database.
  *  - A booking created here is a 10-minute unpaid hold
- *    (status "pending_payment"). Nothing in this module confirms,
- *    pays for or cancels a booking.
+ *    (status "pending_payment"). Nothing in this module confirms or
+ *    pays for a booking. The one thing it can end is the caller's own
+ *    unpaid hold, through cancel_booking(p_booking_id uuid) (see
+ *    supabase/migrations/20261025190000_cancel_booking.sql).
  *  - The database is authoritative. Success is reported only when the
  *    RPC returned a well-formed row; any other outcome, including a
  *    malformed response, is a failure.
@@ -30,6 +32,7 @@ import { formatSlotTime } from './facilityRepository';
  */
 
 export const CREATE_BOOKING_RPC = 'create_booking';
+export const CANCEL_BOOKING_RPC = 'cancel_booking';
 
 /** Whether the customer UI may create reservations through the RPC. */
 export const RESERVATIONS_ENABLED = true;
@@ -46,6 +49,8 @@ export type BookingFailureKind =
   | 'limit'
   /** The request itself was invalid (date outside the booking window). */
   | 'invalid'
+  /** The booking cannot be cancelled (not an unpaid hold, or a payment is in flight). */
+  | 'not_cancellable'
   /** Could not reach the service. The outcome is unknown. */
   | 'network'
   /** Anything else. The outcome may be unknown. */
@@ -122,7 +127,16 @@ export const MESSAGES = {
     'Could not reach the booking service. Check Your Schedule before trying again, in case the reservation went through.',
   unknown:
     'We could not complete your reservation. Check Your Schedule before trying again.',
-  loadFailed: 'Could not load your bookings. Please try again.'
+  loadFailed: 'Could not load your bookings. Please try again.',
+  cancelNotFound: 'That booking could not be found. Refresh Your Schedule.',
+  cancelNotHold:
+    'Only an unpaid reservation can be cancelled here. This booking is already paid or finished.',
+  cancelPaymentInProgress:
+    'A payment may be in progress for this reservation, so it cannot be cancelled right now. Check Your Schedule in a moment.',
+  cancelNetwork:
+    'Could not reach the booking service. Check Your Schedule to see whether the reservation was cancelled.',
+  cancelUnknown:
+    'We could not cancel this reservation. Check Your Schedule before trying again.'
 } as const;
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -173,6 +187,57 @@ export function toBookingError(error: unknown): BookingError {
   }
 
   return new BookingError('unknown', MESSAGES.unknown);
+}
+
+/**
+ * Map an error from cancel_booking() to a safe BookingError. Kept apart
+ * from toBookingError() because the same Postgres codes mean different
+ * things here (P0002 is a missing booking, not a missing venue) and a
+ * failed cancel must never advise "choose another slot".
+ */
+export function toCancelError(error: unknown): BookingError {
+  if (error instanceof BookingError) return error;
+
+  const e = asRecord(error);
+  const code = typeof e?.code === 'string' ? e.code : undefined;
+
+  switch (code) {
+    case '28000':
+    case '42501':
+    case 'PGRST301':
+    case 'PGRST302':
+      return new BookingError('unauthenticated', MESSAGES.unauthenticated);
+    case 'P0002':
+      return new BookingError('unavailable', MESSAGES.cancelNotFound);
+    case 'UB005':
+      return new BookingError('not_cancellable', MESSAGES.cancelNotHold);
+    case 'UB006':
+      return new BookingError('not_cancellable', MESSAGES.cancelPaymentInProgress);
+    case '22023':
+      return new BookingError('invalid', MESSAGES.invalid);
+  }
+
+  const status = typeof e?.status === 'number' ? e.status : undefined;
+  const name = typeof e?.name === 'string' ? e.name : '';
+
+  if (
+    name === 'AuthRetryableFetchError' ||
+    status === 0 ||
+    (error instanceof TypeError && /fetch|network/i.test(error.message))
+  ) {
+    return new BookingError('network', MESSAGES.cancelNetwork);
+  }
+
+  return new BookingError('unknown', MESSAGES.cancelUnknown);
+}
+
+/** What cancel_booking() reports: the hold is cancelled, or had already lapsed. */
+export type CancelOutcome = 'cancelled' | 'expired';
+
+/** Accept only the two statuses the function can return for a success. */
+export function parseCancelOutcome(data: unknown): CancelOutcome {
+  if (data === 'cancelled' || data === 'expired') return data;
+  throw new BookingError('unknown', MESSAGES.cancelUnknown);
 }
 
 // -- Validation and parsing ---------------------------------------------
@@ -375,6 +440,31 @@ export function createBookingRepository(getClient: () => SupabaseClient) {
       if (result.error) throw toBookingError(result.error);
 
       return parseCreatedBooking(result.data);
+    },
+
+    /**
+     * Cancel the caller's own UNPAID hold through cancel_booking().
+     * Resolves 'cancelled', or 'expired' when the hold had already run
+     * out; throws a BookingError otherwise. A paid booking is refused by
+     * the database, never cancelled here.
+     */
+    async cancelBooking(bookingId: string): Promise<CancelOutcome> {
+      if (!UUID_PATTERN.test(bookingId)) {
+        throw new BookingError('invalid', MESSAGES.invalid);
+      }
+
+      const { client } = await requireUserId();
+
+      let result: { data: unknown; error: unknown };
+      try {
+        result = await client.rpc(CANCEL_BOOKING_RPC, { p_booking_id: bookingId });
+      } catch (error) {
+        throw toCancelError(error);
+      }
+
+      if (result.error) throw toCancelError(result.error);
+
+      return parseCancelOutcome(result.data);
     },
 
     /**

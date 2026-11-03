@@ -7,7 +7,7 @@ import {
   toBookingError,
   UserBooking
 } from '../services/bookingRepository';
-import { eventService } from '../services/eventService';
+import { communityRepository, toCommunityError, type CommunityEventView } from '../services/communityRepository';
 
 interface UserProfileProps {
   user: User;
@@ -22,7 +22,11 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
     | { phase: 'ready'; bookings: UserBooking[] }
   >({ phase: 'loading' });
   const [bookingsReloadKey, setBookingsReloadKey] = useState(0);
-  const [userEvents, setUserEvents] = useState<any[]>([]);
+  const [eventsView, setEventsView] = useState<
+    | { phase: 'loading' }
+    | { phase: 'error'; message: string }
+    | { phase: 'ready'; events: CommunityEventView[] }
+  >({ phase: 'loading' });
   const [formData, setFormData] = useState({
     name: user.name || '',
     phone: user.phone || '',
@@ -37,14 +41,24 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const refreshData = () => {
-    const allEvents = eventService.getAllEvents();
-    const joinedEvents = allEvents.filter(e => e.participants.includes(user.id));
-    setUserEvents(joinedEvents);
-  };
-
+  // The community events this person takes part in, from the database.
   useEffect(() => {
-    refreshData();
+    let cancelled = false;
+
+    setEventsView({ phase: 'loading' });
+
+    communityRepository
+      .loadEvents({ onlyMine: true })
+      .then(events => {
+        if (!cancelled) setEventsView({ phase: 'ready', events });
+      })
+      .catch(err => {
+        if (!cancelled) setEventsView({ phase: 'error', message: toCommunityError(err).message });
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [user.id]);
 
   // Real bookings from the database. Nothing is read from local storage.
@@ -172,6 +186,9 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                 className="w-full border border-neutral-200 rounded-md p-3 focus:outline-none focus:border-orange-500"
                 placeholder="Preferences (comma separated)"
               />
+              <p className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+                Bio and preferences are saved in this browser only. Name and phone are saved to your account.
+              </p>
 
               <div className="flex gap-4">
                 <button
@@ -304,6 +321,51 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                       </div>
                     );
                   })}
+              </div>
+            </section>
+          )}
+
+          {!isEditing && (
+            <section className="mt-12" aria-labelledby="my-events-heading">
+              <h3 id="my-events-heading" className="text-xs font-black text-neutral-400 uppercase tracking-widest mb-6">
+                My Community Events
+              </h3>
+
+              <div className="space-y-4" aria-live="polite">
+                {eventsView.phase === 'loading' && (
+                  <p className="text-neutral-400 text-xs font-bold uppercase tracking-widest">Loading your events…</p>
+                )}
+                {eventsView.phase === 'error' && (
+                  <p role="alert" className="text-xs font-bold text-red-700">{eventsView.message}</p>
+                )}
+                {eventsView.phase === 'ready' && eventsView.events.length === 0 && (
+                  <p className="text-neutral-400 text-xs font-bold uppercase tracking-widest">
+                    You have not joined any community events yet.
+                  </p>
+                )}
+                {eventsView.phase === 'ready' &&
+                  eventsView.events.map(event => (
+                    <div key={event.id} className="bg-white border border-neutral-200 rounded-xl p-5">
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="min-w-0">
+                          <h4 className="text-lg font-black uppercase tracking-tight text-neutral-900 break-words">{event.title}</h4>
+                          <p className="text-xs uppercase tracking-widest text-neutral-400 mt-1">
+                            {event.groupName} • {event.facilityName}
+                          </p>
+                          <p className="text-sm font-medium text-neutral-600 mt-2">
+                            <span className="text-orange-600 font-bold">{event.date}</span>
+                            <span className="mx-2">•</span>
+                            {event.time}
+                          </p>
+                        </div>
+                        {event.status !== 'approved' && (
+                          <span className="shrink-0 text-[11px] font-black uppercase tracking-widest px-3 py-1 rounded-full border text-yellow-800 bg-yellow-100 border-yellow-200">
+                            {event.status === 'pending' ? 'Awaiting approval' : 'Rejected'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
               </div>
             </section>
           )}

@@ -1,0 +1,14 @@
+# Security headers for the static host (Cloudflare Pages reads this file).
+# Single-page-app fallback needs no rule: with no top-level 404.html, Pages
+# serves the app for any path that is not a file.
+#
+# Keep connect-src in step with the Supabase project. The Razorpay hosts are
+# needed only when payment is enabled (test mode); no other third party is
+# used at runtime.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://checkout.razorpay.com https://cdn.razorpay.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https://*.razorpay.com; connect-src 'self' https://vnusbfswqtagrcvkbauf.supabase.co https://*.razorpay.com; frame-src https://api.razorpay.com https://checkout.razorpay.com; object-src 'none'; base-uri 'self'; form-action 'self' https://*.razorpay.com; frame-ancestors 'none'
+  X-Frame-Options: DENY
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

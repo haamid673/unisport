@@ -28,13 +28,11 @@
 --
 --   1. Sign up in the app (or via Studio) with the email you will use
 --      as the owner.
---   2. Promote that profile to owner. Role changes are guarded by a
---      trigger, so the guard is lifted for this one statement:
---
---        alter table public.profiles disable trigger profiles_prevent_role_escalation;
---        update public.profiles set role = 'owner'
---          where id = (select id from auth.users where email = 'you@example.com');
---        alter table public.profiles enable trigger profiles_prevent_role_escalation;
+--   2. Make that account an owner in the app: sign in as an
+--      administrator and use the Governance Center (Accounts and
+--      roles). The first administrator is made once with
+--      supabase/dev/bootstrap_first_admin.sql. No trigger is ever
+--      disabled.
 --
 -- Usage:
 --
@@ -128,18 +126,9 @@ begin
      'Indiranagar Padel Club', 'Two glass-walled padel courts.',
      'Padel', '100 Feet Road, Indiranagar', 'Bangalore',
      12.9784, 77.6408, 'active', 1800)
-  on conflict (id) do update
-  set
-    owner_id    = excluded.owner_id,
-    name        = excluded.name,
-    description = excluded.description,
-    sport       = excluded.sport,
-    address     = excluded.address,
-    city        = excluded.city,
-    latitude    = excluded.latitude,
-    longitude   = excluded.longitude,
-    status      = excluded.status,
-    base_price  = excluded.base_price;
+  -- Existing rows are left exactly as they are: an owner's edits and an
+  -- administrator's approve/suspend decisions survive a re-run.
+  on conflict (id) do nothing;
 
   -- -------------------------------------------------------
   -- Operating hours: every day 06:00-22:00

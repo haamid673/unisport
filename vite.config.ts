@@ -15,6 +15,18 @@ export default defineConfig(({ mode }) => {
         port: 3000,
         host: '0.0.0.0',
       },
+      build: {
+        rollupOptions: {
+          output: {
+            // Stable, cacheable vendor chunks; app screens are split by
+            // React.lazy in App.tsx.
+            manualChunks: {
+              react: ['react', 'react-dom', 'react-router-dom'],
+              supabase: ['@supabase/supabase-js']
+            }
+          }
+        }
+      },
       plugins: [react()],
       resolve: {
         alias: {

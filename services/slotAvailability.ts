@@ -1,6 +1,7 @@
 import { Slot, SlotAvailabilityStatus } from '../types';
 import { effectiveStatus } from './bookingRepository';
 import type { UserBooking } from './bookingRepository';
+import { isLiveOffer } from './waitlistRepository';
 
 /**
  * What the customer slot list knows about availability for the selected
@@ -138,6 +139,91 @@ export function getWaitlistAction(
   return alreadyListed
     ? { visible: true, label: 'On waitlist', joinable: false }
     : { visible: true, label: 'Join waitlist', joinable: true };
+}
+
+/**
+ * The slot row's control for a LIVE waitlist offer the signed-in user
+ * holds.
+ *
+ * get_slot_availability() deliberately leaves the offer holder's own
+ * offer out of its answer, so for the holder the slot reads "available"
+ * and the row would say a generic "Book". The holder's own waitlist
+ * entry is the only thing that knows better, so it is read here.
+ *
+ * Pure. Accepting is NOT implemented here: the caller runs the page's
+ * existing accept handler (waitlistRepository.acceptOffer ->
+ * accept_waitlist_offer), the same one as the "Your Waitlist" Accept
+ * button. The database stays the authority and re-checks the offer.
+ *
+ *   visible   the user has an offer for this slot and date that the
+ *             database issued (status "offered") and whose window has
+ *             not passed by `now`
+ *
+ * Fail closed: nothing is shown while the availability is unknown
+ * (loading, error, slot missing from the answer), for an inactive or
+ * closed slot, or for an entry whose expiry is missing. Waiting,
+ * accepted, cancelled and expired entries are never an offer.
+ */
+export interface OfferAction<E> {
+  visible: boolean;
+  entry: E | null;
+  label: string;
+  /** Accessible name without the clock time (the caller adds it). */
+  ariaLabel: string;
+  /** When the offer lapses (ISO), for display. */
+  expiresAt: string | null;
+}
+
+export function getOfferAction<
+  E extends {
+    id: string;
+    slotId: string;
+    bookingDate: string;
+    status: Parameters<typeof isLiveOffer>[0]['status'];
+    offerExpiresAt: string | null;
+  }
+>(
+  slot: Pick<Slot, 'id' | 'time' | 'isActive'>,
+  view: AvailabilityView,
+  entries: readonly E[],
+  bookingDate: string,
+  now: Date = new Date()
+): OfferAction<E> {
+  const hidden: OfferAction<E> = {
+    visible: false,
+    entry: null,
+    label: '',
+    ariaLabel: '',
+    expiresAt: null
+  };
+
+  if (slot.isActive === false) return hidden;
+  if (view.phase !== 'ready') return hidden;
+
+  // A stale "booked" snapshot is fine (the entry is newer than it), but
+  // a slot the database reports closed, inactive or not at all cannot
+  // be taken.
+  const status = view.byId[slot.id];
+  if (status === undefined || status === 'closed' || status === 'inactive') return hidden;
+
+  const entry =
+    entries.find(
+      e =>
+        e.slotId === slot.id &&
+        e.bookingDate === bookingDate &&
+        e.offerExpiresAt !== null &&
+        isLiveOffer(e, now)
+    ) ?? null;
+
+  if (!entry) return hidden;
+
+  return {
+    visible: true,
+    entry,
+    label: 'Accept offer',
+    ariaLabel: `${slot.time}: accept your waitlist offer`,
+    expiresAt: entry.offerExpiresAt
+  };
 }
 
 /**

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
+import NotificationBell from './NotificationBell';
 
 interface NavbarProps {
   user: User | null;
@@ -36,17 +37,17 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, activeTab, setActiveTab
           </div>
 
           {/* Desktop Menu */}
-          <div className="hidden md:flex space-x-12">
+          <div className="hidden md:flex space-x-6 lg:space-x-12">
             <button 
               onClick={() => setActiveTab('dashboard')}
-              className={`text-sm font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'dashboard' ? 'text-orange-600 border-orange-600' : 'text-neutral-400 border-transparent hover:text-neutral-900'}`}
+              className={`whitespace-nowrap text-sm font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'dashboard' ? 'text-orange-600 border-orange-600' : 'text-neutral-400 border-transparent hover:text-neutral-900'}`}
             >
               {dashboardLabel}
             </button>
             {user.role === 'user' && (
             <button 
               onClick={() => setActiveTab('community')}
-              className={`text-sm font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'community' ? 'text-orange-600 border-orange-600' : 'text-neutral-400 border-transparent hover:text-neutral-900'}`}
+              className={`whitespace-nowrap text-sm font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'community' ? 'text-orange-600 border-orange-600' : 'text-neutral-400 border-transparent hover:text-neutral-900'}`}
             >
               Community
             </button>
@@ -55,16 +56,17 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, activeTab, setActiveTab
             {user.role === 'user' && (
             <button 
               onClick={() => setActiveTab('profile')}
-              className={`text-sm font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'profile' ? 'text-orange-600 border-orange-600' : 'text-neutral-400 border-transparent hover:text-neutral-900'}`}
+              className={`whitespace-nowrap text-sm font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'profile' ? 'text-orange-600 border-orange-600' : 'text-neutral-400 border-transparent hover:text-neutral-900'}`}
             >
               Profile
             </button>
             )}
           </div>
 
-          <div className="hidden md:flex items-center space-x-6">
+          <div className="hidden md:flex items-center space-x-3 lg:space-x-6">
+            <NotificationBell userId={user.id} />
             <div 
-              className="text-right hidden sm:block"
+              className="text-right hidden lg:block"
             >
               <p className="text-xs font-bold text-neutral-900 uppercase tracking-wide">{user.name || user.email}</p>
               <div className="flex items-center justify-end gap-1">
@@ -74,16 +76,19 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, activeTab, setActiveTab
             </div>
             <button 
               onClick={onLogout}
-              className="px-4 py-2 text-xs font-black uppercase tracking-widest text-white bg-neutral-900 hover:bg-red-600 transition-colors rounded-sm"
+              className="whitespace-nowrap px-4 py-2 text-xs font-black uppercase tracking-widest text-white bg-neutral-900 hover:bg-red-600 transition-colors rounded-sm"
             >
               Sign Out
             </button>
           </div>
 
           {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center">
+          <div className="md:hidden flex items-center gap-1">
+            <NotificationBell userId={user.id} />
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
+              aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={isMenuOpen}
               className="text-neutral-900 hover:text-orange-600 focus:outline-none p-2"
             >
               <i className={`fas ${isMenuOpen ? 'fa-times' : 'fa-bars'} text-2xl`}></i>
@@ -110,6 +115,9 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, activeTab, setActiveTab
             >
               {dashboardLabel}
             </button>
+            {/* Same screens as the desktop menu: only players have these two */}
+            {user.role === 'user' && (
+              <>
             <button 
               onClick={() => handleTabClick('community')}
               className={`block w-full text-left px-4 py-3 text-sm font-black uppercase tracking-widest rounded-lg transition-colors ${activeTab === 'community' ? 'bg-orange-50 text-orange-600' : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900'}`}
@@ -122,6 +130,8 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, activeTab, setActiveTab
             >
               Profile
             </button>
+              </>
+            )}
             
             <div className="pt-4 mt-4 border-t border-neutral-100">
               <button 

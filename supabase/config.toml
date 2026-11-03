@@ -161,7 +161,7 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+additional_redirect_urls = ["https://127.0.0.1:3000", "http://127.0.0.1:3000/**", "http://localhost:3000/**"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -180,7 +180,7 @@ enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
 enable_manual_linking = false
 # Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
-minimum_password_length = 6
+minimum_password_length = 8
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
 password_requirements = ""
@@ -385,6 +385,25 @@ deno_version = 2
 
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
+
+# Payment Edge Functions (see supabase/functions/README.md). Their
+# Razorpay credentials are server-only secrets, supplied with
+# `supabase functions serve --env-file <file outside the repo>`; they are
+# never configured here and never in a VITE_* variable.
+[functions.payments-create-order]
+# Called by the signed-in user: the gateway requires a valid JWT, and the
+# function validates it again with GoTrue to obtain the user id.
+verify_jwt = true
+
+[functions.payments-verify]
+# Called by the signed-in user after Checkout; same JWT handling as
+# payments-create-order. It only triggers a server-side provider fetch.
+verify_jwt = true
+
+[functions.payments-webhook]
+# Called by Razorpay, which sends no Supabase JWT. Authenticated by the
+# X-Razorpay-Signature HMAC over the raw body inside the function.
+verify_jwt = false
 
 [analytics]
 enabled = true

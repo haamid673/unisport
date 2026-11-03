@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { parseSlotStartHour } from '../slotTime';
-import { aiEngine } from '../aiEngine';
 
 describe('parseSlotStartHour', () => {
   it('reads 12-hour display ranges with the meridiem', () => {
@@ -37,56 +36,5 @@ describe('parseSlotStartHour', () => {
     expect(parseSlotStartHour('1800')).toBeNull();
     expect(parseSlotStartHour(undefined)).toBeNull();
     expect(parseSlotStartHour(null)).toBeNull();
-  });
-});
-
-describe('aiEngine.analyzeSlotDemand peak-hour detection', () => {
-  const slot = (id: string, time: string) => ({ id, time, basePrice: 1000 });
-
-  it('flags evening PM slots as high demand and morning slots as low', async () => {
-    const result = await aiEngine.analyzeSlotDemand(
-      'Venue',
-      'Padel',
-      [
-        slot('evening', '06:00 PM - 07:00 PM'),
-        slot('morning', '06:00 AM - 07:00 AM'),
-        slot('noon', '12:00 PM - 01:00 PM'),
-        slot('late', '10:00 PM - 11:00 PM')
-      ],
-      []
-    );
-
-    const byId = Object.fromEntries(result.map(r => [r.slotId, r]));
-
-    expect(byId.evening.demandLevel).toBe('High');
-    expect(byId.evening.isSurge).toBe(true);
-    // 06:00 AM used to be read as 6 and 06:00 PM as 6 too; only the
-    // evening one is prime time.
-    expect(byId.morning.demandLevel).toBe('Low');
-    expect(byId.noon.demandLevel).toBe('Low');
-    expect(byId.late.demandLevel).toBe('Low');
-  });
-
-  it('does not treat an unreadable time as prime time', async () => {
-    const [prediction] = await aiEngine.analyzeSlotDemand(
-      'Venue',
-      'Padel',
-      [slot('x', 'sometime')],
-      []
-    );
-    expect(prediction.demandLevel).toBe('Low');
-  });
-
-  it('still rises with booking history and uses valid level names', async () => {
-    const history = [{ slotId: 'm' }, { slotId: 'm' }];
-    const [medium] = await aiEngine.analyzeSlotDemand(
-      'Venue',
-      'Padel',
-      [slot('m', '06:00 AM - 07:00 AM')],
-      history
-    );
-    expect(medium.demandLevel).toBe('Medium');
-    expect(typeof medium.confidence).toBe('number');
-    expect(typeof medium.surgePercent).toBe('number');
   });
 });

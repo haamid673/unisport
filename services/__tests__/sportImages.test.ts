@@ -21,7 +21,7 @@ describe('sport images', () => {
     ]) {
       const url = getSportImage(sport);
       expect(url).not.toMatch(/^images\//);
-      expect(url).toMatch(/^(\/|https:\/\/)/);
+      expect(url).toMatch(/^\//);
     }
   });
 
@@ -40,5 +40,17 @@ describe('sport images', () => {
       expect(files.has(file), `${file} missing from public/images`).toBe(true);
     }
     expect(existsSync(publicImages)).toBe(true);
+  });
+
+  it('serves every sport from a bundled file: no hotlinks, and each file exists', () => {
+    const base = import.meta.env.BASE_URL;
+    for (const sport of [
+      'Badminton', 'Football', 'Basketball', 'Cricket', 'Tennis', 'Padel',
+      'Volleyball', 'Swimming', 'Gym', 'Yoga', 'Table Tennis', 'Unknown Sport'
+    ]) {
+      const url = getSportImage(sport);
+      expect(url).not.toMatch(/^https?:/);
+      expect(existsSync(`${publicImages}/${url.slice(`${base}images/`.length)}`), sport).toBe(true);
+    }
   });
 });

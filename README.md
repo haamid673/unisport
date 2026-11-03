@@ -1,146 +1,140 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# UniSport
 
-# Run and deploy your AI Studio app
+A sports-facility booking platform: players find a venue, hold a slot, join a
+waitlist when it is full and join communities and events; venue owners run
+their venues; administrators approve venues, communities and events and
+manage roles.
 
-This contains everything you need to run your app locally.
+React 19 + TypeScript + Vite on the front end; Supabase (Postgres, Auth, Edge
+Functions) behind it. **The database is the authority**: the browser asks, the
+database decides, and the UI shows only what the database answered.
 
-View your app in AI Studio: https://ai.studio/apps/149dbc7e-c03b-4e1f-b277-7616fbbdc3e7
+![Player home](docs/screenshots/01-player-home.jpg)
 
-## Run Locally
+| | |
+|---|---|
+| ![Waitlist offer on a slot](docs/screenshots/02-waitlist-offer-on-slot.jpg) | ![Cancel with confirmation](docs/screenshots/03-cancel-with-confirm.jpg) |
+| A waitlist offer on its slot row | Cancelling an unpaid hold asks first |
+| ![Governance Center](docs/screenshots/04-admin-governance-center.jpg) | ![Notifications](docs/screenshots/07-notifications-bell.jpg) |
+| Governance Center (admin) | The notification bell |
 
-**Prerequisites:**  Node.js
+(Screenshots are from a local development database with test accounts.)
 
+## What it does
 
-1. Install dependencies:
-   `npm install`
-2. Configure Supabase (see the next section).
-3. Run the app:
-   `npm run dev`
+- **Players:** browse active venues by city, see live slot availability,
+  reserve a slot (a 10-minute unpaid hold), cancel their own hold, join a
+  slot's waitlist and accept an offer when it frees up, see a truthful booking
+  history, start and join communities and events, and get in-app
+  notifications.
+- **Owners:** create venues (they start *pending*), set weekly hours and
+  slots, switch slots on and off, and see their venues' bookings.
+- **Administrators (Governance Center):** approve, reject or suspend venues,
+  approve or reject communities and events, and look up an account by its full
+  email to change its role. Every action is confirmed and re-read.
+- **In the database:** no double booking (an exclusion constraint), per-user
+  limits, a booking window, exclusive waitlist offers, capacity-safe event
+  joins, notifications that cannot repeat, and role changes that cannot
+  remove the last administrator.
 
-## Supabase (authentication)
+Payments exist but are **switched off** (see Known limitations).
 
-Sign-in, sign-up and sessions use Supabase Auth. The database
-(`supabase/migrations`) owns profiles, roles and authorization.
+## Quick start (local)
 
-1. Start the local stack: `supabase start` (applies the migrations).
-2. `cp .env.example .env.local`, then set `VITE_SUPABASE_URL` and
-   `VITE_SUPABASE_PUBLISHABLE_KEY` from `supabase status`.
-3. `npm run dev`. If the variables are missing the app shows a
-   configuration error instead of a login screen.
+Prerequisites: Node.js 22, Docker and the Supabase CLI.
 
-Only the **publishable** key may be used in the browser; never put a
-`sb_secret_...` / service-role key in a `VITE_*` variable.
+```bash
+npm ci
+supabase start                       # local Postgres + Auth, applies every migration
+cp .env.example .env.local           # then set the two VITE_ values from `supabase status`
+npm run dev                          # http://localhost:3000
+```
 
-How it works:
+Only the **publishable** key belongs in `.env.local`; the app refuses to start
+if it sees a secret key in a `VITE_*` variable. A fresh database has no
+venues: follow the demo script, [docs/DEMO.md](docs/DEMO.md), which creates
+the three roles and walks the whole product.
 
-- `services/supabaseClient.ts`: the single client, validated from env.
-- `services/authService.ts`: sign-up / sign-in / sign-out, session
-  restoration and profile loading. The `public.profiles` row is created
-  by the database trigger `handle_new_user()`; the role is read from it
-  and never from user metadata or localStorage.
-- `App.tsx` subscribes to the auth state and shows a loading spinner
-  until the stored session has been restored.
+Commands:
 
-Tests: `npm test` (unit tests with a fake client, no network).
+```bash
+npm test               # unit tests (Vitest)
+npm run lint           # type-check
+npm run build          # production build (no CDN, split bundles)
+npm run guards         # repository checks (migrations, secrets, no hosted commands)
+supabase test db       # database tests (pgTAP) — local stack only
+```
 
-Facility browsing (customer view) reads facilities and slots from
-Supabase through `services/facilityRepository.ts`. A failed read shows
-an error with a Retry button; it is never replaced by mock data.
+## Documentation
 
-Slot availability for the open facility and date comes from the database
-function `get_slot_availability(facility_id, date)` (migration
-`20261010180600`), called through `facilityRepository.loadSlotAvailability()`.
-It returns one status per slot (`available`, `booked`, `offer_held`,
-`inactive`, `closed`) and nothing about who booked. Expired payment holds
-and expired waitlist offers are read from the clock, so they count as free
-even before the cron sweep updates them. The answer is a snapshot, not a
-reservation: `create_booking()` is still the authority. A failed read
-shows an error with Retry; slots are never assumed available.
+| Document | What it covers |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | the pieces, the data-flow diagram, layers, routing, time |
+| [docs/AUTHORIZATION.md](docs/AUTHORIZATION.md) | roles, what each can do, who enforces it, closed tables |
+| [docs/DATABASE.md](docs/DATABASE.md) | tables, functions, integrity rules, concurrency, error codes |
+| [docs/BOOKING.md](docs/BOOKING.md) | holds, cancel, availability, the waitlist |
+| [docs/PRICING.md](docs/PRICING.md) | how prices work (and what does not exist) |
+| [docs/PAYMENTS.md](docs/PAYMENTS.md) | the payment design, the simulator, what is and is not verified |
+| [docs/TESTING.md](docs/TESTING.md) | the test layers, how to run them, CI |
+| [docs/DEMO.md](docs/DEMO.md) | a repeatable demo with the three roles |
+| [docs/DEPLOYMENT_RUNBOOK.md](docs/DEPLOYMENT_RUNBOOK.md) | the reviewed plan for a hosted rollout (not executed) |
+| [docs/COMPLETION_PLAN.md](docs/COMPLETION_PLAN.md), [docs/MVP_BACKLOG.md](docs/MVP_BACKLOG.md) | how the product was completed, with results, and what remains |
 
-**Facility approval** (migration `20261010180700`): a facility created by an
-owner must start with status `pending`; an insert with `active`, `suspended`
-or `rejected` is refused, so owners cannot self-approve. Only an admin can
-activate a facility (change `pending` to `active`).
+## Project layout
 
-**Limits enforced by the database** (migrations `20261010180800`,
-`20261010180900`; the UI is not the control):
+```
+App.tsx, components/      screens (no business rules)
+services/                 repositories (the only code that talks to Supabase) and pure helpers
+supabase/migrations/      the schema and every rule (forward-only)
+supabase/tests/database/  pgTAP tests, including multi-session concurrency
+supabase/functions/       payment Edge Functions (off by default)
+supabase/payment-simulator/  local stand-in for Razorpay (never deployed)
+supabase/dev/             local-only scripts: first admin, dev venues
+scripts/                  repository guards
+e2e/checkout-browser/     local browser run of the checkout UI against a mock
+```
 
-- at most 3 *live* unpaid holds per user (`pending_payment` with
-  `expires_at` still in the future); error `UB001`. A user holding a live
-  waitlist offer for a slot may still book/accept that slot at the cap.
-- at most 10 *active* waitlist entries per user (waiting for a future date,
-  or offered with the offer still open); error `UB002`.
-- bookings, waitlist joins and availability reads accept dates up to
-  `current_date + 31` (error `22008`). This is a **temporary
-  compatibility bound** (UI allows 30 days from the browser's local date,
-  the server only knows the UTC date); replace it when facilities get a
-  time zone.
+## Known limitations
 
-Counts use the clock, so expired holds and offers free capacity even before
-the cleanup job runs. Per-user actions are serialised by an advisory lock.
-Every *blocking* path takes locks in the order user, slot, waitlist entry.
-`leave_waitlist` takes an entry row lock first but only a non-blocking
-try-lock on the slot, so it cannot create a blocking lock-order inversion.
-Several accounts, rate limiting, CAPTCHA and retention of old rows are not
-addressed here.
-
-## What is implemented
-
-Backed by Supabase (database rules and Row Level Security are the
-authority; the UI only decides what to show):
-
-- **Accounts:** sign-up, sign-in, sessions, profile name/phone. Roles
-  are assigned in the database; sign-up always creates a `user`.
-- **Customer:** facility discovery by city (the chosen city is remembered
-  per user in this browser), slot availability, reservations, waitlists
-  (join, leave, accept an offer) and a booking history on the profile.
-- **Owner:** create and edit venues (always created `pending`), weekly
-  operating hours, add slots and switch them on/off, and a read-only list
-  of the venue's latest bookings.
-- **Data integrity in the database:** no overlapping slots or bookings at
-  one facility, a slot never changes facility, and a slot's times are
-  frozen while live bookings or waitlist entries reference it.
-
-**A reservation is an unpaid 10-minute hold.** It expires automatically.
-Accepting a waitlist offer also creates a hold, not a paid booking.
-
-## Not implemented yet
-
-- **Payments and booking confirmation:** there is no payment provider and
-  nothing in the app turns a hold into a `confirmed` booking. Cancellation
-  and refunds do not exist either. `components/PaymentPage.tsx` and
-  `services/bookingService.ts` are leftover mock code that is not
-  reachable from the UI (`CUSTOMER_CHECKOUT_ENABLED = false`).
-- **Admin console:** `AdminDashboard` is an explicit placeholder with no
-  actions. Venue approval and role changes are made directly in the
-  database by an administrator.
-- **Communities and events:** the screens show an empty state; groups and
-  events are not stored in Supabase and cannot be created.
-- **Image uploads:** there is no storage bucket or upload UI. Venue images
-  are bundled defaults (`public/images`) or external stock photos.
-- **Notifications:** none (no email, SMS or push); offers and holds are
-  only visible in the app.
-- **Browser-only extras:** profile bio and preferences are stored in this
-  browser, not in the database.
+- **Payments are off.** A reservation is an unpaid 10-minute hold that expires
+  by itself. The payment code is complete and tested against a local
+  **simulator only**; it has never talked to Razorpay, no live key is used,
+  and refunds are not implemented. A paid booking cannot be cancelled in the
+  app.
+- **No SMS or push; email only for sign-in help.** Notifications are in-app
+  only. Password reset sends an email through Supabase Auth (the built-in
+  sender is very low-volume; use an SMTP provider for real traffic).
+- **Time is UTC.** The database's day is UTC; venues have no time zone.
+- **No image upload.** Venue photos are bundled defaults per sport.
+- **Profile bio and preferences are saved in the browser only** (the form says
+  so); name and phone are saved to the account.
+- **No booking or payment oversight screens** for administrators (the
+  Governance Center has an audit trail of venue, community, event and role
+  decisions).
+- **Browser testing is light:** one Playwright smoke journey, run by hand.
+  Other features were verified in a real browser by hand.
+- **Not deployed anywhere.** The hosted plan is written, not executed:
+  [docs/DEPLOYMENT_RUNBOOK.md](docs/DEPLOYMENT_RUNBOOK.md).
 
 ## Development data (local only)
 
-A fresh local database has no facilities. To load a small realistic set:
+A fresh local database has no venues.
 
-1. `supabase start`, then sign up in the app with the email you want as
-   the facility owner (no fake users are ever inserted into `auth.users`).
-2. Promote that profile to `owner` (the role-guard trigger is lifted for
-   this one local statement):
+1. `supabase start`, then register in the app with the email you want as the
+   venue owner (no fake users are ever inserted into `auth.users`).
+2. Make a first administrator once per local database (no trigger is
+   disabled; see the header of the script):
 
-   ```sql
-   alter table public.profiles disable trigger profiles_prevent_role_escalation;
-   update public.profiles set role = 'owner'
-     where id = (select id from auth.users where email = 'you@example.com');
-   alter table public.profiles enable trigger profiles_prevent_role_escalation;
+   ```bash
+   psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+        -v admin_email=admin@example.com \
+        -f supabase/dev/bootstrap_first_admin.sql
    ```
-3. Run the seed:
+
+   Sign in as that administrator, open the Governance Center, look up the
+   owner by full email and change the role to `owner`.
+3. Either let the owner create a venue in the app and approve it as the
+   administrator (the real flow), or load six sample venues:
 
    ```bash
    psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
@@ -148,7 +142,15 @@ A fresh local database has no facilities. To load a small realistic set:
         -f supabase/dev/seed_dev_facilities.sql
    ```
 
-The script is idempotent (fixed ids), refuses to run unless the database
-identifies itself as the local Supabase stack, and fails with a clear
-message when the owner does not exist or is not an owner. It is not
+Both scripts are idempotent, refuse to run unless the database identifies as
+the local Supabase stack, and never overwrite existing data. The seed is not
 `supabase/seed.sql`, so `supabase db reset` never runs it automatically.
+
+## Deployment
+
+Static files plus a Supabase project. Read
+[docs/DEPLOYMENT_RUNBOOK.md](docs/DEPLOYMENT_RUNBOOK.md) first: nothing is
+ever applied to a hosted project without an explicit decision, and the
+repository's automation refuses commands that could do so by accident.
+Set `VITE_BASE_PATH` to deploy under a sub-path; the host must serve
+`index.html` for unknown paths (SPA fallback).

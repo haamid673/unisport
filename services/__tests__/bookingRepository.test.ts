@@ -4,6 +4,9 @@ import {
   createBookingRepository,
   BookingError,
   CREATE_BOOKING_RPC,
+  CANCEL_BOOKING_RPC,
+  parseCancelOutcome,
+  toCancelError,
   BOOKING_COLUMNS,
   BOOKING_HISTORY_LIMIT,
   MESSAGES,
@@ -389,5 +392,78 @@ describe('helpers', () => {
   it('toBookingError is idempotent for BookingError', () => {
     const e = new BookingError('limit', 'x');
     expect(toBookingError(e)).toBe(e);
+  });
+});
+
+describe('cancelBooking', () => {
+  it('calls cancel_booking with the booking id only and returns the outcome', async () => {
+    const { repo, rpc, from } = repoFor({ rpc: { data: 'cancelled' } });
+    await expect(repo.cancelBooking(BOOKING_ID)).resolves.toBe('cancelled');
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(CANCEL_BOOKING_RPC, { p_booking_id: BOOKING_ID });
+    expect(CANCEL_BOOKING_RPC).toBe('cancel_booking');
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('reports a hold that had already lapsed as expired', async () => {
+    const { repo } = repoFor({ rpc: { data: 'expired' } });
+    await expect(repo.cancelBooking(BOOKING_ID)).resolves.toBe('expired');
+  });
+
+  it('fails closed without a session and never calls the RPC', async () => {
+    const { repo, rpc } = repoFor({ session: null });
+    expect((await failure(repo.cancelBooking(BOOKING_ID))).kind).toBe('unauthenticated');
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed id before any request', async () => {
+    const { repo, rpc } = repoFor();
+    expect((await failure(repo.cancelBooking('not-a-uuid'))).kind).toBe('invalid');
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('never reports success for an unexpected response', async () => {
+    for (const data of [null, undefined, '', 'confirmed', 'pending_payment', true, ['cancelled'], {}]) {
+      const { repo } = repoFor({ rpc: { data } });
+      expect((await failure(repo.cancelBooking(BOOKING_ID))).kind).toBe('unknown');
+    }
+    expect(() => parseCancelOutcome('cancelled')).not.toThrow();
+  });
+
+  it('maps a paid or finished booking (UB005) to not_cancellable', async () => {
+    const { repo } = repoFor({ rpc: { error: { code: 'UB005', message: 'Only an unpaid hold can be cancelled' } } });
+    const err = await failure(repo.cancelBooking(BOOKING_ID));
+    expect(err.kind).toBe('not_cancellable');
+    expect(err.message).toBe(MESSAGES.cancelNotHold);
+  });
+
+  it('maps a payment in flight (UB006) to not_cancellable with its own message', async () => {
+    const { repo } = repoFor({ rpc: { error: { code: 'UB006', message: 'A payment may be in progress' } } });
+    const err = await failure(repo.cancelBooking(BOOKING_ID));
+    expect(err.kind).toBe('not_cancellable');
+    expect(err.message).toBe(MESSAGES.cancelPaymentInProgress);
+  });
+
+  it('maps a missing or foreign booking (P0002) without "choose another slot" advice', async () => {
+    const { repo } = repoFor({ rpc: { error: { code: 'P0002', message: 'Booking not found' } } });
+    const err = await failure(repo.cancelBooking(BOOKING_ID));
+    expect(err.message).toBe(MESSAGES.cancelNotFound);
+    expect(err.message).not.toMatch(/slot/i);
+  });
+
+  it('maps auth failures and never leaks raw server text', async () => {
+    expect(toCancelError({ code: '28000', message: 'Authentication required' }).kind).toBe('unauthenticated');
+    expect(toCancelError({ code: '42501', message: 'denied' }).kind).toBe('unauthenticated');
+    const odd = toCancelError({ code: 'XX000', message: 'relation "bookings" secret detail' });
+    expect(odd.kind).toBe('unknown');
+    expect(odd.message).not.toMatch(/relation|secret/);
+  });
+
+  it('treats a network failure as an unknown outcome and says to check the schedule', async () => {
+    const { repo } = repoFor({ rpc: () => { throw new TypeError('Failed to fetch'); } });
+    const err = await failure(repo.cancelBooking(BOOKING_ID));
+    expect(err.kind).toBe('network');
+    expect(err.message).toBe(MESSAGES.cancelNetwork);
+    expect(err.message).toMatch(/Check Your Schedule/);
   });
 });

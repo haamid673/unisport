@@ -8,8 +8,6 @@ import { join, relative } from 'node:path';
 import AdminDashboard from '../AdminDashboard';
 import OwnerDashboard from '../OwnerDashboard';
 import { userService } from '../../services/userService';
-import { facilityService } from '../../services/facilityService';
-import { eventService } from '../../services/eventService';
 import type { User } from '../../types';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
@@ -53,14 +51,14 @@ afterAll(() => {
 const owner: User = { id: 'u1', email: 'o@example.com', role: 'owner', city: 'X', name: 'Olivia' };
 
 describe('admin console and owner portal', () => {
-  it('the admin console renders an honest notice with no actions', () => {
-    const html = renderToStaticMarkup(<AdminDashboard />);
+  it('the admin console invents no data before the database answers', () => {
+    const admin: User = { id: 'a1', email: 'a@example.com', role: 'admin', city: 'X', name: 'Ada' };
+    const html = renderToStaticMarkup(<AdminDashboard user={admin} />);
 
-    expect(html).toContain('role="status"');
-    expect(html).toContain('Not available yet');
-    expect(html).not.toContain('<button');
-    expect(html).not.toContain('<input');
-    expect(html).not.toMatch(/LIVE SYNC|REVOKE|Approve|Reject/);
+    expect(html).toContain('Loading venues');
+    expect(html).not.toContain('Approve');
+    expect(html).not.toContain('Reject');
+    expect(html).not.toMatch(/₹|LIVE SYNC|REVOKE/);
   });
 
   it('the owner portal greets the owner and invents no data', () => {
@@ -95,10 +93,12 @@ describe('no demo data or credentials in the application', () => {
   });
 
   it('keeps no mock catalog, accounts or community seed in memory', () => {
-    expect(facilityService.getAllFacilities(true)).toEqual([]);
-    expect(facilityService.getAllSlots()).toEqual([]);
-    expect(eventService.getAllGroups(true)).toEqual([]);
-    expect(eventService.getAllEvents(true)).toEqual([]);
+    for (const gone of ['facilityService', 'bookingService', 'paymentService', 'aiEngine', 'eventService']) {
+      expect(existsSync(join(root, `services/${gone}.ts`)), gone).toBe(false);
+    }
+    expect(existsSync(join(root, 'components/PaymentPage.tsx'))).toBe(false);
+    // community data lives in the database; the browser-local prototype is gone
+    expect(existsSync(join(root, 'services/eventService.ts'))).toBe(false);
     expect((userService as Record<string, unknown>).getAllUsers).toBeUndefined();
   });
 });
@@ -108,11 +108,6 @@ describe('no PII or noise logging', () => {
     for (const file of sourceFiles()) {
       expect(read(file), file).not.toMatch(/console\.log\(/);
     }
-  });
-
-  it('does not log user identity or fake email receipts', () => {
-    const payment = read('components/PaymentPage.tsx');
-    expect(payment).not.toMatch(/EMAIL SENT|user\.email|user\.name/);
   });
 });
 
